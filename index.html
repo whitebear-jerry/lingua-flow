@@ -18,6 +18,9 @@
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700;900&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   
   <link rel="stylesheet" href="./style.css">
+  
+  <!-- SheetJS (xlsx) for pure client-side Excel parsing support -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body>
   
@@ -85,25 +88,25 @@
     <!-- 4. Main Work Area -->
     <main class="main-content">
       
-      <!-- Welcome Screen (CSV Upload) -->
+      <!-- Welcome Screen (CSV/Excel Upload) -->
       <div id="welcome-screen" class="welcome-card card-glass">
         <div class="welcome-header">
           <div class="welcome-logo">🎙️</div>
           <h2>歡迎使用 LinguaFlow 語言學習器</h2>
-          <p>上傳您的 CSV 句子表，即刻展開沉浸式口說與背景聽力輸入學習！</p>
+          <p>上傳您的 CSV 或 Excel 句子表，即刻展開沉浸式口說與背景聽力輸入學習！</p>
         </div>
         
         <!-- Drag & Drop Zone -->
         <div id="drop-zone" class="upload-drop-zone">
           <div class="upload-icon">📂</div>
-          <p class="upload-title">拖曳 CSV 檔案至此，或<span>點擊瀏覽上傳</span></p>
-          <input type="file" id="csv-file-input" accept=".csv" style="display: none;">
-          <p class="upload-subtitle">僅支援標準 UTF-8 編碼之 .csv 檔案</p>
+          <p class="upload-title">拖曳 CSV 或 Excel 檔案至此，或<span>點擊瀏覽上傳</span></p>
+          <input type="file" id="csv-file-input" accept=".csv,.xlsx,.xls" style="display: none;">
+          <p class="upload-subtitle">支援 .csv、.xlsx、.xls 試算表格式</p>
         </div>
 
         <!-- CSV Format Demo Card -->
         <div class="demo-card">
-          <h4>🗂️ 推薦 CSV 資料格式欄位：</h4>
+          <h4>🗂️ 推薦資料格式欄位 (CSV 或 Excel)：</h4>
           <p class="demo-desc">包含 <code>target</code> (英文句子) 與 <code>translation</code> (中文翻譯) 即可運作。</p>
           <div class="table-responsive">
             <table class="demo-table">
@@ -215,7 +218,7 @@
             <!-- Action buttons -->
             <div class="settings-actions">
               <button type="button" id="btn-reupload-csv" class="btn btn-secondary btn-full">
-                📂 重新上傳 CSV (保留熟悉度進度)
+                📂 重新上傳 CSV / Excel (保留進度)
               </button>
               <button type="button" id="btn-clear-progress-trigger" class="btn btn-danger btn-full">
                 🗑️ 清除所有熟悉度進度

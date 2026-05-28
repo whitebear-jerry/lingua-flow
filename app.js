@@ -68,7 +68,7 @@ function saveData() {
   }
 }
 
-// --- 3. Robust CSV Parser ---
+// --- 3. Robust CSV & Excel Parser ---
 // Handles fields enclosed in quotes, nested double quotes, newlines, and auto-generated IDs
 function parseCSV(text) {
   const lines = [];
@@ -102,10 +102,15 @@ function parseCSV(text) {
     lines.push(row);
   }
   
+  return parse2DArray(lines);
+}
+
+// Global Parser for 2D Array data (shared between CSV and Excel)
+function parse2DArray(lines) {
   if (lines.length === 0) return [];
   
   // Header identification
-  const headers = lines[0].map(h => h.trim().toLowerCase());
+  const headers = lines[0].map(h => h !== null && h !== undefined ? String(h).trim().toLowerCase() : "");
   const targetIdx = headers.indexOf('target');
   const transIdx = headers.indexOf('translation');
   const idIdx = headers.indexOf('id');
@@ -114,7 +119,7 @@ function parseCSV(text) {
   const notesIdx = headers.indexOf('notes');
   
   if (targetIdx === -1 || transIdx === -1) {
-    throw new Error("CSV 格式錯誤：必須包含 'target' (英文句子) 與 'translation' (中文翻譯) 欄位！");
+    throw new Error("表格格式錯誤：必須包含 'target' (英文句子) 與 'translation' (中文翻譯) 欄位！");
   }
   
   const parsedResults = [];
@@ -122,21 +127,21 @@ function parseCSV(text) {
   
   for (let i = 1; i < lines.length; i++) {
     const line = lines[i];
-    if (line.length <= Math.max(targetIdx, transIdx)) continue;
+    if (!line || line.length <= Math.max(targetIdx, transIdx)) continue;
     
-    const target = line[targetIdx]?.trim() || "";
-    const translation = line[transIdx]?.trim() || "";
+    const target = line[targetIdx] !== null && line[targetIdx] !== undefined ? String(line[targetIdx]).trim() : "";
+    const translation = line[transIdx] !== null && line[transIdx] !== undefined ? String(line[transIdx]).trim() : "";
     
     if (!target && !translation) continue; // Skip empty rows
     
-    let id = idIdx !== -1 && line[idIdx]?.trim() ? line[idIdx].trim() : "";
+    let id = idIdx !== -1 && line[idIdx] !== null && line[idIdx] !== undefined ? String(line[idIdx]).trim() : "";
     if (!id) {
       id = String(autoIdCounter++).padStart(3, '0');
     }
     
-    const context = contextIdx !== -1 ? line[contextIdx]?.trim() || "" : "";
-    const difficulty = diffIdx !== -1 ? line[diffIdx]?.trim() || "" : "";
-    const notes = notesIdx !== -1 ? line[notesIdx]?.trim() || "" : "";
+    const context = contextIdx !== -1 && line[contextIdx] !== null && line[contextIdx] !== undefined ? String(line[contextIdx]).trim() : "";
+    const difficulty = diffIdx !== -1 && line[diffIdx] !== null && line[diffIdx] !== undefined ? String(line[diffIdx]).trim() : "";
+    const notes = notesIdx !== -1 && line[notesIdx] !== null && line[notesIdx] !== undefined ? String(line[notesIdx]).trim() : "";
     
     parsedResults.push({ id, target, translation, context, difficulty, notes });
   }
@@ -841,14 +846,38 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   
   function handleUploadedFile(file) {
+    const fileName = file.name.toLowerCase();
+    const isExcel = fileName.endsWith(".xlsx") || fileName.endsWith(".xls");
+    
     const reader = new FileReader();
     reader.onload = function(evt) {
       try {
-        const text = evt.target.result;
-        const parsed = parseCSV(text);
+        let parsed = [];
+        if (isExcel) {
+          // Check if XLSX library is loaded correctly
+          if (typeof XLSX === "undefined") {
+            throw new Error("Excel 解析庫尚未載入，請確認網路連線是否正常！");
+          }
+          
+          const data = new Uint8Array(evt.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const sheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[sheetName];
+          
+          // Convert sheet to a 2D array (header: 1 returns array of arrays)
+          const lines = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+          
+          // Filter out completely empty lines
+          const filteredLines = lines.filter(line => line && line.some(cell => cell !== null && cell !== undefined && String(cell).trim() !== ""));
+          
+          parsed = parse2DArray(filteredLines);
+        } else {
+          const text = evt.target.result;
+          parsed = parseCSV(text);
+        }
         
         if (parsed.length === 0) {
-          alert("上傳成功，但解析出 0 句對話。請確認 CSV 是否有內容！");
+          alert(`上傳成功，但解析出 0 句對話。請確認 ${isExcel ? 'Excel' : 'CSV'} 檔案內是否含有欄位與資料！`);
           return;
         }
         
@@ -865,10 +894,15 @@ document.addEventListener("DOMContentLoaded", () => {
         
         alert(`🎉 成功匯入 ${parsed.length} 句對話教材！`);
       } catch (err) {
-        alert(err.message || "解析 CSV 檔案失敗！請確認檔案編碼與欄位格式是否正確。");
+        alert(err.message || `解析 ${isExcel ? 'Excel' : 'CSV'} 檔案失敗！請確認檔案欄位格式是否正確。`);
       }
     };
-    reader.readAsText(file, "UTF-8");
+    
+    if (isExcel) {
+      reader.readAsArrayBuffer(file);
+    } else {
+      reader.readAsText(file, "UTF-8");
+    }
   }
   
   // B. Navigation & Header Button Listeners
