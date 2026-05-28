@@ -109,17 +109,30 @@ function parseCSV(text) {
 function parse2DArray(lines) {
   if (lines.length === 0) return [];
   
-  // Header identification
+  // Header identification with aliases matching support
   const headers = lines[0].map(h => h !== null && h !== undefined ? String(h).trim().toLowerCase() : "");
-  const targetIdx = headers.indexOf('target');
-  const transIdx = headers.indexOf('translation');
-  const idIdx = headers.indexOf('id');
-  const contextIdx = headers.indexOf('context');
-  const diffIdx = headers.indexOf('difficulty');
-  const notesIdx = headers.indexOf('notes');
+  
+  function findHeaderIndex(headersList, aliases) {
+    for (const alias of aliases) {
+      const idx = headersList.indexOf(alias.toLowerCase());
+      if (idx !== -1) return idx;
+    }
+    return -1;
+  }
+  
+  const targetIdx = findHeaderIndex(headers, ['target', '英文翻譯', '英文句子', '英文', 'english', 'sentence']);
+  const transIdx = findHeaderIndex(headers, ['translation', '中文句子', '中文翻譯', '中文', '翻譯', 'chinese']);
+  const idIdx = findHeaderIndex(headers, ['id', '序號', '編號', 'no', 'num']);
+  const contextIdx = findHeaderIndex(headers, ['context', '情境應用', '情境', '分類', '標籤', 'tags', 'tag']);
+  const notesIdx = findHeaderIndex(headers, ['notes', '實用片語/單字解析', '備註', '片語', '解析', '單字', 'note']);
+  const diffIdx = findHeaderIndex(headers, ['difficulty', '難度', 'level']);
   
   if (targetIdx === -1 || transIdx === -1) {
-    throw new Error("表格格式錯誤：必須包含 'target' (英文句子) 與 'translation' (中文翻譯) 欄位！");
+    throw new Error(
+      "表格格式錯誤：無法辨識關鍵欄位名稱！\n" +
+      "必須包含「英文翻譯」或 'target'，以及「中文句子」或 'translation' 欄位標題。\n" +
+      "目前偵測到的欄位標題為: [" + lines[0].filter(h => h).join(', ') + "]"
+    );
   }
   
   const parsedResults = [];
