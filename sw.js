@@ -1,4 +1,4 @@
-const CACHE_NAME = "linguaflow-v1";
+const CACHE_NAME = "linguaflow-v2";
 const ASSETS = [
   "./",
   "./index.html",
@@ -37,14 +37,28 @@ self.addEventListener("activate", (e) => {
   self.clients.claim();
 });
 
-// Cache-First fetch strategy for cached assets, fallback to network
+// Network-First fetch strategy: try network first, update cache, fallback to cache if offline
 self.addEventListener("fetch", (e) => {
+  // Only handle standard GET requests
+  if (e.request.method !== "GET" || !e.request.url.startsWith(self.location.origin)) {
+    return;
+  }
+
   e.respondWith(
-    caches.match(e.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-      return fetch(e.request);
-    })
+    fetch(e.request)
+      .then((networkResponse) => {
+        // If response is valid, clone and update cache
+        if (networkResponse && networkResponse.status === 200) {
+          const responseToCache = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(e.request, responseToCache);
+          });
+        }
+        return networkResponse;
+      })
+      .catch(() => {
+        // Offline: try to return from static cache
+        return caches.match(e.request);
+      })
   );
 });
