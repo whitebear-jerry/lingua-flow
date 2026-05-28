@@ -190,7 +190,27 @@ function handleCSVSmartMerge(newSentences) {
 
 // --- 4. Web Speech Synthesis TTS Controller ---
 
-let currentAudio = null; // 追蹤當前播放的 Audio 實例，方便隨時暫停
+let globalAudio = null; // 全域單一 Audio 實例，用於手機端手勢授權與防重疊
+
+// 手動在使用者點擊或按鍵時，解鎖 Audio 播放權限（專為手機/iOS端設計）
+function unlockAudioContext() {
+  if (!globalAudio) {
+    globalAudio = new Audio();
+  }
+  // 如果尚未標記解鎖，藉由播放 0.1 秒無聲 base64 音軌解鎖
+  if (!globalAudio.unlocked) {
+    const silentSrc = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAAA";
+    globalAudio.src = silentSrc;
+    globalAudio.play()
+      .then(() => {
+        globalAudio.unlocked = true;
+        console.log("globalAudio unlocked successfully!");
+      })
+      .catch(err => {
+        console.warn("Failed to unlock globalAudio:", err);
+      });
+  }
+}
 
 // 統一中止當前所有發音引擎的播放
 function cancelAllSpeech() {
@@ -198,16 +218,17 @@ function cancelAllSpeech() {
   window.speechSynthesis.cancel();
   
   // 2. 停止 Audio TTS (Google/OpenAI)
-  if (currentAudio) {
+  if (globalAudio) {
     try {
-      currentAudio.pause();
-      currentAudio.src = "";
+      globalAudio.pause();
+      globalAudio.onended = null;
+      globalAudio.onerror = null;
     } catch (e) {
       console.error("停止音訊播放失敗:", e);
     }
-    currentAudio = null;
   }
 }
+
 
 // 播放系統內建 TTS
 function playSystemTTS(text, callback) {
@@ -236,28 +257,39 @@ function playSystemTTS(text, callback) {
 // 播放 Google 高品質網路語音 (免費、免 Key、CORS 友善)
 function playGoogleTTS(text, callback) {
   const lang = settings.lang || 'en-US';
-  const url = `https://translate.google.com/translate_tts?ie=UTF-8&tl=${encodeURIComponent(lang)}&client=tw-ob&q=${encodeURIComponent(text)}`;
+  // 使用 translate.googleapis.com 並搭配 client=gtx 繞過 CORS 與 Referer 阻擋
+  const url = `https://translate.googleapis.com/translate_tts?ie=UTF-8&tl=${encodeURIComponent(lang)}&client=gtx&q=${encodeURIComponent(text)}`;
   
-  const audio = new Audio(url);
-  currentAudio = audio;
+  if (!globalAudio) {
+    globalAudio = new Audio();
+  }
+  
+  cancelAllSpeech();
+  
+  globalAudio.src = url;
   
   // 設置播放速度
-  audio.playbackRate = settings.speed || 1.0;
+  globalAudio.playbackRate = settings.speed || 1.0;
   
-  audio.onended = () => {
-    if (currentAudio === audio) currentAudio = null;
+  globalAudio.onended = () => {
+    globalAudio.onended = null;
+    globalAudio.onerror = null;
     if (callback) callback();
   };
   
-  audio.onerror = (err) => {
+  globalAudio.onerror = (err) => {
     console.error("Google TTS error:", err);
-    if (currentAudio === audio) currentAudio = null;
+    globalAudio.onended = null;
+    globalAudio.onerror = null;
     console.warn("Google 語音播放出錯，自動降級嘗試使用系統發音...");
     playSystemTTS(text, callback);
   };
   
-  audio.play().catch(err => {
+  globalAudio.play().catch(err => {
     console.error("Google Audio play failed:", err);
+    globalAudio.onended = null;
+    globalAudio.onerror = null;
+    console.warn("Google 語音播放失敗，自動降級嘗試使用系統發音...");
     playSystemTTS(text, callback);
   });
 }
@@ -270,6 +302,12 @@ async function playOpenAITTS(text, callback) {
     playGoogleTTS(text, callback);
     return;
   }
+  
+  if (!globalAudio) {
+    globalAudio = new Audio();
+  }
+  
+  cancelAllSpeech();
   
   try {
     const response = await fetch("https://api.openai.com/v1/audio/speech", {
@@ -294,26 +332,31 @@ async function playOpenAITTS(text, callback) {
     const blob = await response.blob();
     const audioUrl = URL.createObjectURL(blob);
     
-    const audio = new Audio(audioUrl);
-    currentAudio = audio;
+    globalAudio.src = audioUrl;
+    globalAudio.playbackRate = 1.0; // speed is already handled by OpenAI API
     
-    audio.onended = () => {
-      if (currentAudio === audio) currentAudio = null;
+    globalAudio.onended = () => {
+      globalAudio.onended = null;
+      globalAudio.onerror = null;
       URL.revokeObjectURL(audioUrl);
       if (callback) callback();
     };
     
-    audio.onerror = (err) => {
+    globalAudio.onerror = (err) => {
       console.error("OpenAI TTS Audio error:", err);
-      if (currentAudio === audio) currentAudio = null;
+      globalAudio.onended = null;
+      globalAudio.onerror = null;
       URL.revokeObjectURL(audioUrl);
       console.warn("OpenAI 語音音軌載入失敗，自動降級至 Google 高品質語音...");
       playGoogleTTS(text, callback);
     };
     
-    audio.play().catch(err => {
+    globalAudio.play().catch(err => {
       console.error("OpenAI Audio play failed:", err);
+      globalAudio.onended = null;
+      globalAudio.onerror = null;
       URL.revokeObjectURL(audioUrl);
+      console.warn("OpenAI 語音播放出錯，自動降級至 Google 高品質語音...");
       playGoogleTTS(text, callback);
     });
     
@@ -358,6 +401,7 @@ function speakRepeat(text, n, count, onComplete, onProgress) {
 
 // Manual play trigger from a card
 function playCardSentence(cardId, repeatCount) {
+  unlockAudioContext(); // 解鎖手機端音訊播放
   if (isBrushTeethActive) {
     stopBrushTeethMode();
   }
@@ -405,6 +449,7 @@ function incrementPlayCount(cardId) {
 // --- 5. Brush Teeth Background Mode State Machine ---
 
 function startBrushTeethMode() {
+  unlockAudioContext(); // 解鎖手機端音訊播放
   const filtered = getFilteredSentences();
   if (filtered.length === 0) {
     alert("目前篩選的清單中沒有句子！請調整過濾條件。");
@@ -881,31 +926,47 @@ function populateVoices() {
   voiceSelect.innerHTML = "";
   
   // Filter voices matching selected settings.lang
-  const filteredVoices = voices.filter(v => v.lang.toLowerCase().startsWith(settings.lang.toLowerCase().split('-')[0]));
+  const targetLang = settings.lang.toLowerCase().split('-')[0];
+  const filteredVoices = voices.filter(v => v.lang.toLowerCase().startsWith(targetLang));
   
-  if (filteredVoices.length === 0) {
-    // Fallback: list all system voices
-    voices.forEach(voice => {
-      const option = document.createElement("option");
-      option.value = voice.voiceURI;
-      option.textContent = `${voice.name} (${voice.lang})`;
-      voiceSelect.appendChild(option);
-    });
-  } else {
-    filteredVoices.forEach(voice => {
-      const option = document.createElement("option");
-      option.value = voice.voiceURI;
-      option.textContent = `${voice.name} (${voice.lang})`;
-      voiceSelect.appendChild(option);
-    });
-  }
+  const listToUse = filteredVoices.length > 0 ? filteredVoices : voices;
+  
+  // Helper to identify high quality voice
+  const isHighQuality = (v) => {
+    const name = v.name.toLowerCase();
+    const uri = v.voiceURI.toLowerCase();
+    return name.includes('google') || name.includes('online') || name.includes('natural') || 
+           name.includes('siri') || name.includes('premium') || name.includes('enhanced') ||
+           uri.includes('google') || uri.includes('online') || uri.includes('natural') || 
+           uri.includes('siri') || uri.includes('premium') || uri.includes('enhanced');
+  };
+  
+  // Sort high-quality voices to the top
+  listToUse.sort((a, b) => {
+    const aHQ = isHighQuality(a) ? 1 : 0;
+    const bHQ = isHighQuality(b) ? 1 : 0;
+    return bHQ - aHQ;
+  });
+  
+  listToUse.forEach(voice => {
+    const option = document.createElement("option");
+    option.value = voice.voiceURI;
+    const hqPrefix = isHighQuality(voice) ? "🔥 [高品質] " : "";
+    option.textContent = `${hqPrefix}${voice.name} (${voice.lang})`;
+    voiceSelect.appendChild(option);
+  });
   
   // Match current URI selection
   if (settings.voiceURI) {
     voiceSelect.value = settings.voiceURI;
   }
   
-  // Update setting in case current selection has become invalid
+  // If no matched voice was selected, default to the first voice in the sorted dropdown (first high quality voice)
+  if (!voiceSelect.value && voiceSelect.options.length > 0) {
+    voiceSelect.selectedIndex = 0;
+  }
+  
+  // Update setting in case current selection has become invalid or was newly set
   if (voiceSelect.value) {
     settings.voiceURI = voiceSelect.value;
   }
