@@ -10,7 +10,10 @@ let settings = {
   voiceURI: '',
   speed: 1.0,
   singleRepeat: 5,
-  gap: 1.0
+  gap: 1.0,
+  engine: 'google',       // 預設為高品質免 Key 的 Google 語音
+  openaiApiKey: '',       // OpenAI API 密鑰
+  openaiVoice: 'alloy'    // OpenAI 推薦真人音色
 };
 
 // UI Filter States
@@ -187,20 +190,31 @@ function handleCSVSmartMerge(newSentences) {
 
 // --- 4. Web Speech Synthesis TTS Controller ---
 
-// Speaks a single text string and executes a callback on completion
-function speakSingle(text, callback) {
-  window.speechSynthesis.cancel(); // Terminate ongoing speech immediately
+let currentAudio = null; // 追蹤當前播放的 Audio 實例，方便隨時暫停
+
+// 統一中止當前所有發音引擎的播放
+function cancelAllSpeech() {
+  // 1. 停止系統 TTS
+  window.speechSynthesis.cancel();
   
-  if (!text) {
-    if (callback) callback();
-    return;
+  // 2. 停止 Audio TTS (Google/OpenAI)
+  if (currentAudio) {
+    try {
+      currentAudio.pause();
+      currentAudio.src = "";
+    } catch (e) {
+      console.error("停止音訊播放失敗:", e);
+    }
+    currentAudio = null;
   }
-  
+}
+
+// 播放系統內建 TTS
+function playSystemTTS(text, callback) {
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = settings.lang;
   utterance.rate = settings.speed;
   
-  // Match System Voice
   const voices = window.speechSynthesis.getVoices();
   const matchedVoice = voices.find(v => v.voiceURI === settings.voiceURI);
   if (matchedVoice) {
@@ -212,11 +226,120 @@ function speakSingle(text, callback) {
   };
   
   utterance.onerror = (err) => {
-    console.error("SpeechSynthesis error:", err);
+    console.error("System SpeechSynthesis error:", err);
     if (callback) callback();
   };
   
   window.speechSynthesis.speak(utterance);
+}
+
+// 播放 Google 高品質網路語音 (免費、免 Key、CORS 友善)
+function playGoogleTTS(text, callback) {
+  const lang = settings.lang || 'en-US';
+  const url = `https://translate.google.com/translate_tts?ie=UTF-8&tl=${encodeURIComponent(lang)}&client=tw-ob&q=${encodeURIComponent(text)}`;
+  
+  const audio = new Audio(url);
+  currentAudio = audio;
+  
+  // 設置播放速度
+  audio.playbackRate = settings.speed || 1.0;
+  
+  audio.onended = () => {
+    if (currentAudio === audio) currentAudio = null;
+    if (callback) callback();
+  };
+  
+  audio.onerror = (err) => {
+    console.error("Google TTS error:", err);
+    if (currentAudio === audio) currentAudio = null;
+    console.warn("Google 語音播放出錯，自動降級嘗試使用系統發音...");
+    playSystemTTS(text, callback);
+  };
+  
+  audio.play().catch(err => {
+    console.error("Google Audio play failed:", err);
+    playSystemTTS(text, callback);
+  });
+}
+
+// 播放 OpenAI 頂級真人 AI 語音 (極致效果，需 Key)
+async function playOpenAITTS(text, callback) {
+  const apiKey = settings.openaiApiKey;
+  if (!apiKey) {
+    console.warn("未設定 OpenAI API Key，自動降級切換至 Google 高品質語音...");
+    playGoogleTTS(text, callback);
+    return;
+  }
+  
+  try {
+    const response = await fetch("https://api.openai.com/v1/audio/speech", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "tts-1",
+        input: text,
+        voice: settings.openaiVoice || 'alloy',
+        speed: settings.speed || 1.0
+      })
+    });
+    
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`OpenAI API 錯誤: ${response.status} - ${errText}`);
+    }
+    
+    const blob = await response.blob();
+    const audioUrl = URL.createObjectURL(blob);
+    
+    const audio = new Audio(audioUrl);
+    currentAudio = audio;
+    
+    audio.onended = () => {
+      if (currentAudio === audio) currentAudio = null;
+      URL.revokeObjectURL(audioUrl);
+      if (callback) callback();
+    };
+    
+    audio.onerror = (err) => {
+      console.error("OpenAI TTS Audio error:", err);
+      if (currentAudio === audio) currentAudio = null;
+      URL.revokeObjectURL(audioUrl);
+      console.warn("OpenAI 語音音軌載入失敗，自動降級至 Google 高品質語音...");
+      playGoogleTTS(text, callback);
+    };
+    
+    audio.play().catch(err => {
+      console.error("OpenAI Audio play failed:", err);
+      URL.revokeObjectURL(audioUrl);
+      playGoogleTTS(text, callback);
+    });
+    
+  } catch (error) {
+    console.error("OpenAI TTS 請求錯誤:", error);
+    playGoogleTTS(text, callback);
+  }
+}
+
+// Speaks a single text string and executes a callback on completion
+function speakSingle(text, callback) {
+  cancelAllSpeech(); // 每次開始前先停止所有 ongoing 語音
+  
+  if (!text) {
+    if (callback) callback();
+    return;
+  }
+  
+  // 依引擎分流
+  if (settings.engine === 'google') {
+    playGoogleTTS(text, callback);
+  } else if (settings.engine === 'openai') {
+    playOpenAITTS(text, callback);
+  } else {
+    playSystemTTS(text, callback);
+  }
 }
 
 // Handles N-times loops recursively using speechSynthesis events
@@ -355,7 +478,7 @@ function stopBrushTeethMode() {
   isBrushTeethActive = false;
   activePlayingId = null;
   
-  window.speechSynthesis.cancel();
+  cancelAllSpeech();
   if (btTimeoutId) clearTimeout(btTimeoutId);
   
   const btn = document.getElementById("btn-brush-teeth");
@@ -788,13 +911,42 @@ function populateVoices() {
   }
 }
 
+// 動態控制設定 Modal 欄位顯隱
+function toggleEngineFields(engine) {
+  const systemVoiceGroup = document.getElementById("system-voice-config-group");
+  const openaiConfigGroup = document.getElementById("openai-config-group");
+  const langConfigGroup = document.getElementById("lang-config-group");
+  
+  if (engine === 'system') {
+    if (systemVoiceGroup) systemVoiceGroup.style.display = "flex";
+    if (openaiConfigGroup) openaiConfigGroup.style.display = "none";
+    if (langConfigGroup) langConfigGroup.style.display = "flex";
+  } else if (engine === 'google') {
+    if (systemVoiceGroup) systemVoiceGroup.style.display = "none";
+    if (openaiConfigGroup) openaiConfigGroup.style.display = "none";
+    if (langConfigGroup) langConfigGroup.style.display = "flex";
+  } else if (engine === 'openai') {
+    if (systemVoiceGroup) systemVoiceGroup.style.display = "none";
+    if (openaiConfigGroup) openaiConfigGroup.style.display = "flex";
+    if (langConfigGroup) langConfigGroup.style.display = "flex";
+  }
+}
+
 // Initialize settings form with current state
 function initSettingsUI() {
+  document.getElementById("settings-engine").value = settings.engine || 'google';
   document.getElementById("settings-lang").value = settings.lang;
   document.getElementById("settings-speed").value = settings.speed;
   document.getElementById("speed-val").textContent = `${settings.speed}x`;
   document.getElementById("settings-single-repeat").value = settings.singleRepeat;
   document.getElementById("settings-gap").value = settings.gap;
+  
+  // OpenAI 相關
+  document.getElementById("settings-openai-key").value = settings.openaiApiKey || '';
+  document.getElementById("settings-openai-voice").value = settings.openaiVoice || 'alloy';
+  
+  // 動態切換顯隱
+  toggleEngineFields(settings.engine || 'google');
   
   populateVoices();
 }
@@ -938,11 +1090,16 @@ document.addEventListener("DOMContentLoaded", () => {
       btnSaveSettings.addEventListener("click", (e) => {
         e.preventDefault();
         
+        settings.engine = document.getElementById("settings-engine").value || 'google';
         settings.lang = document.getElementById("settings-lang").value.trim() || 'en-US';
         settings.voiceURI = document.getElementById("settings-voice").value;
         settings.speed = parseFloat(document.getElementById("settings-speed").value);
         settings.singleRepeat = parseInt(document.getElementById("settings-single-repeat").value);
         settings.gap = parseFloat(document.getElementById("settings-gap").value);
+        
+        // OpenAI 相關
+        settings.openaiApiKey = document.getElementById("settings-openai-key").value.trim();
+        settings.openaiVoice = document.getElementById("settings-openai-voice").value || 'alloy';
         
         saveData();
         hideSettings();
@@ -960,6 +1117,14 @@ document.addEventListener("DOMContentLoaded", () => {
     langInput.addEventListener("change", () => {
       settings.lang = langInput.value.trim() || 'en-US';
       populateVoices();
+    });
+  }
+  
+  // Engine select listener to toggle fields
+  const engineSelect = document.getElementById("settings-engine");
+  if (engineSelect) {
+    engineSelect.addEventListener("change", (e) => {
+      toggleEngineFields(e.target.value);
     });
   }
   

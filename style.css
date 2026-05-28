@@ -895,7 +895,7 @@ body {
   color: var(--text-secondary);
 }
 
-.form-group input[type="text"] {
+.form-group input[type="text"], .form-group input[type="password"] {
   height: 42px;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid var(--card-border);
@@ -908,7 +908,7 @@ body {
   transition: var(--transition-smooth);
 }
 
-.form-group input[type="text"]:focus {
+.form-group input[type="text"]:focus, .form-group input[type="password"]:focus {
   border-color: var(--primary);
 }
 
