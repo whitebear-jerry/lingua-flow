@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>LinguaFlow - 語言學習器 MVP</title>
+  
+  <!-- PWA Support -->
+  <link rel="manifest" href="./manifest.json">
+  <meta name="theme-color" content="#8b5cf6">
+  <link rel="apple-touch-icon" href="./icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700;900&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  
+  <div class="app-container">
+    
+    <!-- 1. Header (Fixed top) -->
+    <header class="app-header">
+      <div class="header-left">
+        <span class="logo-icon">🌐</span>
+        <h1 class="logo-text">LinguaFlow</h1>
+      </div>
+      <div class="header-right">
+        <button id="btn-toggle-all-trans" class="btn-icon" title="切換全部翻譯顯示/隱藏 (快捷鍵: T)">
+          <span class="icon">👁️</span>
+        </button>
+        <button id="btn-open-settings" class="btn-icon" title="設定 (快捷鍵: ⚙️)">
+          <span class="icon">⚙️</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- 2. Progress Tracker Panel -->
+    <section class="progress-section card-glass">
+      <div class="progress-meta">
+        <span id="progress-summary-text">已熟悉 0｜練習中 0｜共 0 句</span>
+        <span id="progress-percent-text" class="percent-badge">0%</span>
+      </div>
+      <div class="progress-bar-container">
+        <div id="pb-mastered" class="pb-segment pb-green" style="width: 0%" title="已熟悉"></div>
+        <div id="pb-practicing" class="pb-segment pb-blue" style="width: 0%" title="練習中"></div>
+        <div id="pb-unstarted" class="pb-segment pb-gray" style="width: 100%" title="未開始"></div>
+      </div>
+    </section>
+
+    <!-- 3. Filter & Search Panel -->
+    <section class="filter-section">
+      <!-- Search Input -->
+      <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="search-input" placeholder="搜尋英文句子或中文翻譯...">
+        <button id="btn-clear-search" class="clear-icon" style="display: none;">×</button>
+      </div>
+
+      <!-- Filters Row -->
+      <div class="filters-row">
+        <!-- Horizontal scrolling Status Tabs -->
+        <div class="status-tabs-container">
+          <div class="status-tabs">
+            <button class="status-tab active" data-status="all">全部</button>
+            <button class="status-tab" data-status="unstarted">🔘 未開始</button>
+            <button class="status-tab" data-status="practicing">🔵 練習中</button>
+            <button class="status-tab" data-status="mastered">✅ 已熟悉</button>
+          </div>
+        </div>
+
+        <!-- Tags Dropdown Filter -->
+        <div class="tag-filter-wrapper">
+          <select id="context-filter" class="dropdown-style">
+            <option value="all">📁 所有標籤</option>
+          </select>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. Main Work Area -->
+    <main class="main-content">
+      
+      <!-- Welcome Screen (CSV Upload) -->
+      <div id="welcome-screen" class="welcome-card card-glass">
+        <div class="welcome-header">
+          <div class="welcome-logo">🎙️</div>
+          <h2>歡迎使用 LinguaFlow 語言學習器</h2>
+          <p>上傳您的 CSV 句子表，即刻展開沉浸式口說與背景聽力輸入學習！</p>
+        </div>
+        
+        <!-- Drag & Drop Zone -->
+        <div id="drop-zone" class="upload-drop-zone">
+          <div class="upload-icon">📂</div>
+          <p class="upload-title">拖曳 CSV 檔案至此，或<span>點擊瀏覽上傳</span></p>
+          <input type="file" id="csv-file-input" accept=".csv" style="display: none;">
+          <p class="upload-subtitle">僅支援標準 UTF-8 編碼之 .csv 檔案</p>
+        </div>
+
+        <!-- CSV Format Demo Card -->
+        <div class="demo-card">
+          <h4>🗂️ 推薦 CSV 資料格式欄位：</h4>
+          <p class="demo-desc">包含 <code>target</code> (英文句子) 與 <code>translation</code> (中文翻譯) 即可運作。</p>
+          <div class="table-responsive">
+            <table class="demo-table">
+              <thead>
+                <tr>
+                  <th>id (可選)</th>
+                  <th>target (必填)</th>
+                  <th>translation (必填)</th>
+                  <th>context (選填)</th>
+                  <th>difficulty (選填)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>001</td>
+                  <td>Good morning everyone.</td>
+                  <td>大家早安。</td>
+                  <td>打招呼</td>
+                  <td>初級</td>
+                </tr>
+                <tr>
+                  <td>002</td>
+                  <td>I'd like to schedule a meeting.</td>
+                  <td>我想安排一個會議。</td>
+                  <td>職場</td>
+                  <td>中級</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sentence Cards Container -->
+      <div id="learning-screen" style="display: none;">
+        <div id="cards-grid" class="cards-grid">
+          <!-- Cards are dynamically rendered here by JavaScript -->
+        </div>
+
+        <!-- Pagination Bar -->
+        <div id="pagination-bar" class="pagination-bar" style="display: none;">
+          <button id="btn-prev-page" class="btn btn-sm btn-secondary">◀ 上一頁</button>
+          <span id="page-indicator">第 1 / 1 頁</span>
+          <button id="btn-next-page" class="btn btn-sm btn-secondary">下一頁 ▶</button>
+        </div>
+      </div>
+      
+    </main>
+
+    <!-- 5. Settings Modal -->
+    <div id="settings-modal" class="modal-overlay" style="display: none;">
+      <div class="modal-content card-glass">
+        <div class="modal-header">
+          <h3>⚙️ 學習設定與語音配置</h3>
+          <button id="btn-close-settings" class="close-btn">&times;</button>
+        </div>
+        <div class="modal-body">
+          <form id="settings-form">
+            <!-- Lang Input -->
+            <div class="form-group">
+              <label for="settings-lang">🌐 語言代碼 (Language Code)</label>
+              <input type="text" id="settings-lang" placeholder="例如: en-US, ja-JP, ko-KR" value="en-US" required>
+              <small class="form-help">輸入後點擊空白處，下方音色列表將自動更新對應語言。</small>
+            </div>
+
+            <!-- Voice select -->
+            <div class="form-group">
+              <label for="settings-voice">🗣️ 朗讀音色選擇 (System Voices)</label>
+              <select id="settings-voice" class="dropdown-style">
+                <!-- Dynamically populated native system voices -->
+              </select>
+              <small class="form-help">音色源於您目前的瀏覽器與作業系統內建語音引擎。</small>
+            </div>
+
+            <!-- Speed (Rate) slider -->
+            <div class="form-group">
+              <label for="settings-speed">⚡ 播放速度: <span id="speed-val">1.0x</span></label>
+              <input type="range" id="settings-speed" min="0.5" max="2" step="0.25" value="1.0">
+            </div>
+
+            <div class="form-row">
+              <!-- Single repeat count -->
+              <div class="form-group half-width">
+                <label for="settings-single-repeat">🔁 單句重複次數</label>
+                <select id="settings-single-repeat" class="dropdown-style">
+                  <option value="1">1 次</option>
+                  <option value="3">3 次</option>
+                  <option value="5" selected>5 次</option>
+                  <option value="10">10 次</option>
+                  <option value="20">20 次</option>
+                </select>
+              </div>
+
+              <!-- Gap seconds -->
+              <div class="form-group half-width">
+                <label for="settings-gap">⏳ 句子間隔秒數</label>
+                <select id="settings-gap" class="dropdown-style">
+                  <option value="0.5">0.5 秒</option>
+                  <option value="1" selected>1 秒</option>
+                  <option value="2">2 秒</option>
+                  <option value="3">3 秒</option>
+                  <option value="5">5 秒</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="divider"></div>
+
+            <!-- Action buttons -->
+            <div class="settings-actions">
+              <button type="button" id="btn-reupload-csv" class="btn btn-secondary btn-full">
+                📂 重新上傳 CSV (保留熟悉度進度)
+              </button>
+              <button type="button" id="btn-clear-progress-trigger" class="btn btn-danger btn-full">
+                🗑️ 清除所有熟悉度進度
+              </button>
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button id="btn-save-settings" class="btn btn-primary">儲存並套用</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 6. Secondary Confirmation Modal -->
+    <div id="confirm-modal" class="modal-overlay" style="display: none; z-index: 2100;">
+      <div class="modal-content card-glass confirm-card">
+        <div class="modal-header">
+          <h3>⚠️ 確認清除進度？</h3>
+        </div>
+        <div class="modal-body">
+          <p>此動作將會把所有句子的狀態重置為「🔘 未開始」，並清除播放次數記錄。此動作無法還原！</p>
+        </div>
+        <div class="modal-footer">
+          <button id="btn-confirm-cancel" class="btn btn-secondary">取消</button>
+          <button id="btn-confirm-yes" class="btn btn-danger">確認重置</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 7. Fixed Bottom Toolbar (Brush Teeth Mode Control) -->
+    <footer class="app-footer">
+      <button id="btn-brush-teeth" class="btn-brush-teeth-mode">
+        <span class="pulse-ring"></span>
+        <span class="bt-icon">🌙</span>
+        <span id="brush-teeth-text" class="bt-text">開啟 刷牙洗臉背景模式</span>
+      </button>
+    </footer>
+
+  </div>
+
+  <script src="./app.js"></script>
+  <script>
+    // Register Service Worker for PWA
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+          .then((reg) => console.log('Service Worker registered successfully:', reg.scope))
+          .catch((err) => console.error('Service Worker registration failed:', err));
+      });
+    }
+  </script>
+</body>
+</html>
