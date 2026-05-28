@@ -197,18 +197,15 @@ function unlockAudioContext() {
   if (!globalAudio) {
     globalAudio = new Audio();
   }
-  // 如果尚未標記解鎖，藉由播放 0.1 秒無聲 base64 音軌解鎖
-  if (!globalAudio.unlocked) {
-    const silentSrc = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAAA";
-    globalAudio.src = silentSrc;
-    globalAudio.play()
-      .then(() => {
-        globalAudio.unlocked = true;
-        console.log("globalAudio unlocked successfully!");
-      })
-      .catch(err => {
-        console.warn("Failed to unlock globalAudio:", err);
-      });
+  // Only play silent audio to unlock if the engine is OpenAI, because OpenAI requires async fetch.
+  // Google TTS is synchronous, so its play is user-triggered and unlocks the audio naturally!
+  if (settings.engine === 'openai') {
+    try {
+      globalAudio.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA";
+      globalAudio.play().catch(err => console.log("Silent play unlock skipped or failed:", err));
+    } catch (e) {
+      console.warn("Silent play unlock failed:", e);
+    }
   }
 }
 
@@ -284,46 +281,9 @@ function cleanTextForTTS(text, targetLang) {
                       !targetLang.toLowerCase().startsWith('ja') && 
                       !targetLang.toLowerCase().startsWith('ko');
   if (isLatinLang) {
-    cleaned = cleaned.replace(/[\u4e00-\u9fa5\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/g, '');
+    cleaned = cleaned.replace(/[^\x00-\xff]/g, ''); // 移除雙位元組字元（如中日韓文字）
   }
-  
-  // 5. 清理多於空白字元
-  cleaned = cleaned.replace(/\s+/g, ' ').trim();
-  
-  // 6. 防範過濾過度，如果過濾後只剩下標點符號或為空，則回退至原文字
-  if (!cleaned || /^[\s\p{P}]+$/u.test(cleaned)) {
-    return text;
-  }
-  
-  return cleaned;
-}
-
-// 播放系統內建 TTS
-function playSystemTTS(text, callback) {
-  const lang = detectLanguage(text);
-  const cleanedText = cleanTextForTTS(text, lang);
-  const utterance = new SpeechSynthesisUtterance(cleanedText);
-  
-  // 智慧配對語言
-  utterance.lang = lang;
-  utterance.rate = settings.speed || 1.0;
-  
-  const voices = window.speechSynthesis.getVoices();
-  const matchedVoice = voices.find(v => v.voiceURI === settings.voiceURI);
-  if (matchedVoice) {
-    utterance.voice = matchedVoice;
-  }
-  
-  utterance.onend = () => {
-    if (callback) callback();
-  };
-  
-  utterance.onerror = (err) => {
-    console.error("System SpeechSynthesis error:", err);
-    if (callback) callback();
-  };
-  
-  window.speechSynthesis.speak(utterance);
+  return cleaned.trim();
 }
 
 // 播放 Google 高品質網路語音 (免費、免 Key、CORS 友善)
@@ -349,49 +309,46 @@ function playGoogleTTS(text, callback) {
   
   // 設定防變調與變速邏輯，適用於所有瀏覽器（包含 iOS Safari）
   const applySpeedAndPitch = () => {
-    globalAudio.playbackRate = settings.speed || 1.0;
-    if ('preservesPitch' in globalAudio) {
-      globalAudio.preservesPitch = true;
-    }
-    if ('webkitPreservesPitch' in globalAudio) {
-      globalAudio.webkitPreservesPitch = true;
+    try {
+      globalAudio.playbackRate = settings.speed || 1.0;
+      if ('preservesPitch' in globalAudio) {
+        globalAudio.preservesPitch = true;
+      } else if ('webkitPreservesPitch' in globalAudio) {
+        globalAudio.webkitPreservesPitch = true;
+      }
+    } catch (e) {
+      console.warn("Failed to apply speed/pitch on Google Audio:", e);
     }
   };
   
-  globalAudio.onplay = applySpeedAndPitch;
-  globalAudio.oncanplay = applySpeedAndPitch;
   globalAudio.onloadedmetadata = applySpeedAndPitch;
   
-  // 立即套用一次
-  applySpeedAndPitch();
+  // 只有當 readyState 大於 0 (已經載入 metadata) 時才安全套用，防範 iOS Safari 報錯中斷載入
+  if (globalAudio.readyState > 0) {
+    applySpeedAndPitch();
+  }
   
   globalAudio.onended = () => {
-    globalAudio.onended = null;
-    globalAudio.onerror = null;
-    globalAudio.onplay = null;
-    globalAudio.oncanplay = null;
-    globalAudio.onloadedmetadata = null;
+    cleanupListeners();
     if (callback) callback();
   };
   
   globalAudio.onerror = (err) => {
     console.error("Google TTS error:", err);
-    globalAudio.onended = null;
-    globalAudio.onerror = null;
-    globalAudio.onplay = null;
-    globalAudio.oncanplay = null;
-    globalAudio.onloadedmetadata = null;
+    cleanupListeners();
     console.warn("Google 語音播放出錯，自動降級嘗試使用系統發音...");
     playSystemTTS(text, callback);
   };
   
-  globalAudio.play().catch(err => {
-    console.error("Google Audio play failed:", err);
+  function cleanupListeners() {
     globalAudio.onended = null;
     globalAudio.onerror = null;
-    globalAudio.onplay = null;
-    globalAudio.oncanplay = null;
     globalAudio.onloadedmetadata = null;
+  }
+  
+  globalAudio.play().catch(err => {
+    console.error("Google Audio play failed:", err);
+    cleanupListeners();
     console.warn("Google 語音播放失敗，自動降級嘗試使用系統發音...");
     playSystemTTS(text, callback);
   });
@@ -415,6 +372,8 @@ async function playOpenAITTS(text, callback) {
   
   cancelAllSpeech();
   
+  let audioUrl = null;
+  
   try {
     const response = await fetch("https://api.openai.com/v1/audio/speech", {
       method: "POST",
@@ -436,65 +395,113 @@ async function playOpenAITTS(text, callback) {
     }
     
     const blob = await response.blob();
-    const audioUrl = URL.createObjectURL(blob);
+    audioUrl = URL.createObjectURL(blob);
     
     globalAudio.src = audioUrl;
     
     // 設定防變調與變速邏輯，確保變速行為一致（OpenAI 雖然在 API 端變速，但我們在瀏覽器端依然維持相應控制）
     const applyPitch = () => {
-      globalAudio.playbackRate = 1.0; // speed is already handled by OpenAI API
-      if ('preservesPitch' in globalAudio) {
-        globalAudio.preservesPitch = true;
-      }
-      if ('webkitPreservesPitch' in globalAudio) {
-        globalAudio.webkitPreservesPitch = true;
+      try {
+        globalAudio.playbackRate = 1.0; // speed is already handled by OpenAI API
+        if ('preservesPitch' in globalAudio) {
+          globalAudio.preservesPitch = true;
+        } else if ('webkitPreservesPitch' in globalAudio) {
+          globalAudio.webkitPreservesPitch = true;
+        }
+      } catch (e) {
+        console.warn("Failed to apply pitch on OpenAI Audio:", e);
       }
     };
     
-    globalAudio.onplay = applyPitch;
-    globalAudio.oncanplay = applyPitch;
     globalAudio.onloadedmetadata = applyPitch;
     
-    applyPitch();
+    if (globalAudio.readyState > 0) {
+      applyPitch();
+    }
     
     globalAudio.onended = () => {
-      globalAudio.onended = null;
-      globalAudio.onerror = null;
-      globalAudio.onplay = null;
-      globalAudio.oncanplay = null;
-      globalAudio.onloadedmetadata = null;
-      URL.revokeObjectURL(audioUrl);
+      cleanupListeners();
+      if (audioUrl) URL.revokeObjectURL(audioUrl);
       if (callback) callback();
     };
     
     globalAudio.onerror = (err) => {
       console.error("OpenAI TTS Audio error:", err);
-      globalAudio.onended = null;
-      globalAudio.onerror = null;
-      globalAudio.onplay = null;
-      globalAudio.oncanplay = null;
-      globalAudio.onloadedmetadata = null;
-      URL.revokeObjectURL(audioUrl);
+      cleanupListeners();
+      if (audioUrl) URL.revokeObjectURL(audioUrl);
       console.warn("OpenAI 語音音軌載入失敗，自動降級至 Google 高品質語音...");
       playGoogleTTS(text, callback);
     };
     
-    globalAudio.play().catch(err => {
-      console.error("OpenAI Audio play failed:", err);
+    function cleanupListeners() {
       globalAudio.onended = null;
       globalAudio.onerror = null;
-      globalAudio.onplay = null;
-      globalAudio.oncanplay = null;
       globalAudio.onloadedmetadata = null;
-      URL.revokeObjectURL(audioUrl);
+    }
+    
+    globalAudio.play().catch(err => {
+      console.error("OpenAI Audio play failed:", err);
+      cleanupListeners();
+      if (audioUrl) URL.revokeObjectURL(audioUrl);
       console.warn("OpenAI 語音播放出錯，自動降級至 Google 高品質語音...");
       playGoogleTTS(text, callback);
     });
     
   } catch (error) {
     console.error("OpenAI TTS 請求錯誤:", error);
+    if (audioUrl) URL.revokeObjectURL(audioUrl);
     playGoogleTTS(text, callback);
   }
+}
+
+// 播放系統內建 TTS 語音 (Web Speech API, 回退引擎)
+function playSystemTTS(text, callback) {
+  const lang = detectLanguage(text);
+  let cleanedText = cleanTextForTTS(text, lang);
+  
+  cancelAllSpeech();
+  
+  const utterance = new SpeechSynthesisUtterance(cleanedText);
+  utterance.lang = lang;
+  utterance.rate = settings.speed || 1.0;
+  
+  // 嘗試匹配使用者指定的系統發音人
+  if (settings.voiceURI) {
+    const voices = window.speechSynthesis.getVoices();
+    const matchedVoice = voices.find(v => v.voiceURI === settings.voiceURI);
+    if (matchedVoice) {
+      utterance.voice = matchedVoice;
+    }
+  }
+  
+  let called = false;
+  const finish = () => {
+    if (!called) {
+      called = true;
+      if (callback) callback();
+    }
+  };
+  
+  utterance.onend = finish;
+  utterance.onerror = (e) => {
+    console.error("System TTS error:", e);
+    finish();
+  };
+  
+  // 安全逾時防線 (解決某些行動裝置瀏覽器遺失 onend 事件的 Bug)
+  const duration = (cleanedText.length * 0.15 + 1.0) / (settings.speed || 1.0) * 1000;
+  const safetyTimeout = setTimeout(finish, duration + 2000);
+  
+  utterance.onend = () => {
+    clearTimeout(safetyTimeout);
+    finish();
+  };
+  utterance.onerror = () => {
+    clearTimeout(safetyTimeout);
+    finish();
+  };
+  
+  window.speechSynthesis.speak(utterance);
 }
 
 
