@@ -178,9 +178,19 @@
 
             <!-- Lang Input -->
             <div class="form-group" id="lang-config-group">
-              <label for="settings-lang">🌐 語言代碼 (Language Code)</label>
-              <input type="text" id="settings-lang" placeholder="例如: en-US, ja-JP, ko-KR" value="en-US" required>
-              <small class="form-help">設定您的學習語言。例如英文請填 en-US，日文請填 ja-JP。</small>
+              <label for="settings-lang">🌐 學習目標語言 (Target Language)</label>
+              <select id="settings-lang" class="dropdown-style">
+                <option value="en-US">🇺🇸 美式英文 (en-US)</option>
+                <option value="en-GB">🇬🇧 英式英文 (en-GB)</option>
+                <option value="ja-JP">🇯🇵 日語 (ja-JP)</option>
+                <option value="ko-KR">🇰🇷 韓語 (ko-KR)</option>
+                <option value="zh-TW">🇹🇼 繁體中文 (zh-TW)</option>
+                <option value="zh-CN">🇨🇳 簡體中文 (zh-CN)</option>
+                <option value="es-ES">🇪🇸 西班牙語 (es-ES)</option>
+                <option value="fr-FR">🇫🇷 法語 (fr-FR)</option>
+                <option value="de-DE">🇩🇪 德語 (de-DE)</option>
+              </select>
+              <small class="form-help">選擇您要學習與朗讀的目標語言，語音引擎會自動適配對應口音。</small>
             </div>
 
             <!-- Voice select -->
