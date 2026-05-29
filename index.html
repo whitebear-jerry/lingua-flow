@@ -165,8 +165,21 @@
         </div>
         <div class="modal-body">
           <form id="settings-form">
-            <!-- Speech Engine Selection -->
-            <div class="form-group">
+
+            <!-- iOS 專屬提示橫幅（JS 偵測到 iPhone 才顯示） -->
+            <div id="ios-voice-banner" style="display:none; background:rgba(139,92,246,0.12); border:1px solid rgba(139,92,246,0.35); border-radius:12px; padding:14px 16px; margin-bottom:16px;">
+              <div style="font-weight:600; color:#a78bfa; margin-bottom:6px;">📱 iPhone 語音說明</div>
+              <div style="font-size:0.85rem; color:rgba(255,255,255,0.8); line-height:1.6;">
+                iPhone 不支援 Google 網路語音（iOS 系統限制），目前使用<strong id="ios-current-voice" style="color:#c4b5fd;">系統內建語音</strong>。<br><br>
+                <strong>🔼 想要更自然的聲音？</strong>請在 iPhone 設定下載 Enhanced 語音包：<br>
+                <span style="color:#a78bfa;">設定 → 輔助使用 → 閱讀與朗讀 → 聲音 → English</span><br>
+                找到 <strong>Ava / Samantha / Nicky</strong>，點旁邊的 ☁️ 下載，<br>
+                下載後回到這裡重新整理頁面，音色清單會自動更新！
+              </div>
+            </div>
+
+            <!-- Speech Engine Selection（iPhone 上自動隱藏） -->
+            <div class="form-group" id="engine-config-group">
               <label for="settings-engine">🔊 語音發音引擎 (Speech Engine)</label>
               <select id="settings-engine" class="dropdown-style">
                 <option value="system">🗣️ 系統內建語音 (免網路/音色依裝置)</option>

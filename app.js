@@ -1195,14 +1195,35 @@ function initSettingsUI() {
   document.getElementById("speed-val").textContent = `${settings.speed}x`;
   document.getElementById("settings-single-repeat").value = settings.singleRepeat;
   document.getElementById("settings-gap").value = settings.gap;
-  
+
   // OpenAI 相關
   document.getElementById("settings-openai-key").value = settings.openaiApiKey || '';
   document.getElementById("settings-openai-voice").value = settings.openaiVoice || 'alloy';
-  
-  // 動態切換顯隱
-  toggleEngineFields(settings.engine || 'google');
-  
+
+  // iOS/Mobile 專屬 UI 處理
+  if (isMobile) {
+    // 顯示 iOS 說明橫幅，隱藏引擎選擇器（Google/OpenAI 在 iOS 不可用）
+    const banner = document.getElementById("ios-voice-banner");
+    const engineGroup = document.getElementById("engine-config-group");
+    if (banner) banner.style.display = "block";
+    if (engineGroup) engineGroup.style.display = "none";
+
+    // 更新橫幅裡的「目前使用語音」名稱
+    const currentVoiceEl = document.getElementById("ios-current-voice");
+    if (currentVoiceEl && settings.voiceURI) {
+      const voices = window.speechSynthesis.getVoices();
+      const matched = voices.find(v => v.voiceURI === settings.voiceURI);
+      if (matched) currentVoiceEl.textContent = ` ${matched.name}`;
+    }
+
+    // 強制顯示系統語音選擇器，讓用戶可以手動挑選
+    const sysVoiceGroup = document.getElementById("system-voice-config-group");
+    if (sysVoiceGroup) sysVoiceGroup.style.display = "flex";
+  } else {
+    // 非 mobile：正常切換
+    toggleEngineFields(settings.engine || 'google');
+  }
+
   populateVoices();
 }
 
