@@ -1099,50 +1099,70 @@ function populateVoices() {
   const voices = window.speechSynthesis.getVoices();
   voiceSelect.innerHTML = "";
   
-  // Filter voices matching selected lang — show ALL if none match
-  // Safe filtering: guards against null/undefined lang, and standardizes underscores to hyphens (useful for iOS)
+  if (voices.length === 0) return;
+  
   const targetLang = settings.lang.toLowerCase().split('-')[0];
-  const filteredVoices = voices.filter(v => v.lang && v.lang.toLowerCase().replace('_', '-').startsWith(targetLang));
-  const listToUse = filteredVoices.length > 0 ? filteredVoices : voices;
-
-  // Quality tiers (works even when no 'Enhanced' label exists)
+  
+  // Quality tier helper
   const qualityTier = (v) => {
     const n = v.name.toLowerCase();
-    if (n.includes('enhanced') || n.includes('premium') || n.includes('增強音質') || n.includes('高音質') || n.includes('增強')) return 3;
+    // Support English enhanced keywords and Traditional Chinese iOS translation keywords ('新奇' for Nicky, '增強', '高音質')
+    if (n.includes('enhanced') || n.includes('premium') || n.includes('增強音質') || n.includes('高音質') || n.includes('增強') || n.includes('新奇') || n.includes('nicky')) return 3;
     if (n.includes('natural') || n.includes('siri') || n.includes('google') || !v.localService) return 2;
     return 1;
   };
-
-  // Sort: highest quality first, then alphabetical
-  listToUse.sort((a, b) => {
+  
+  // Redesigned: Sort the entire comprehensive list of voices
+  // 1. Matches target language first.
+  // 2. Higher quality tier first (Enhanced / Siri).
+  // 3. Alphabetical by name.
+  const sortedVoices = [...voices].sort((a, b) => {
+    const aLangMatch = a.lang && a.lang.toLowerCase().replace('_', '-').startsWith(targetLang);
+    const bLangMatch = b.lang && b.lang.toLowerCase().replace('_', '-').startsWith(targetLang);
+    
+    if (aLangMatch && !bLangMatch) return -1;
+    if (!aLangMatch && bLangMatch) return 1;
+    
     const diff = qualityTier(b) - qualityTier(a);
-    return diff !== 0 ? diff : a.name.localeCompare(b.name);
+    if (diff !== 0) return diff;
+    
+    return a.name.localeCompare(b.name);
   });
-
+  
   const tierLabel = (v) => {
     const t = qualityTier(v);
     if (t === 3) return '🔥 ';
     if (t === 2) return '⭐ ';
     return '';
   };
-
-  listToUse.forEach(voice => {
+  
+  sortedVoices.forEach(voice => {
     const option = document.createElement("option");
     option.value = voice.voiceURI;
-    option.textContent = `${tierLabel(voice)}${voice.name} (${voice.lang})`;
+    
+    const isLangMatch = voice.lang && voice.lang.toLowerCase().replace('_', '-').startsWith(targetLang);
+    
+    let prefix = "";
+    if (isLangMatch) {
+      prefix = tierLabel(voice);
+    } else {
+      prefix = "🌐 [其他語言] ";
+    }
+    
+    option.textContent = `${prefix}${voice.name} (${voice.lang})`;
     voiceSelect.appendChild(option);
   });
-
+  
   // Match current URI selection
   if (settings.voiceURI) {
     voiceSelect.value = settings.voiceURI;
   }
-
+  
   // If no matched voice was selected, default to the first voice in the sorted dropdown (first high quality voice)
   if (!voiceSelect.value && voiceSelect.options.length > 0) {
     voiceSelect.selectedIndex = 0;
   }
-
+  
   // Update setting in case current selection has become invalid or was newly set
   if (voiceSelect.value) {
     settings.voiceURI = voiceSelect.value;
