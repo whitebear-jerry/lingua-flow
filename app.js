@@ -2,6 +2,12 @@
 // LinguaFlow App Logic (Pure Client-Side PWA Controller)
 // ==========================================================================
 
+// --- 0. Platform Detection ---
+// Google Translate TTS (translate.google.com) is blocked by CORS on iOS/mobile.
+// We detect mobile here and auto-switch to high-quality system voices instead.
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+const isMobile = isIOS || /Mobi|Android/i.test(navigator.userAgent);
+
 // --- 1. Global State ---
 let sentences = [];    // Raw sentences parsed from CSV
 let progress = {};     // Status & play counts: { id: { status: 'unstarted'|'practicing'|'mastered', playCount: 0, lastSeen: 'YYYY-MM-DD' } }
@@ -55,6 +61,17 @@ function loadData() {
     const savedSettings = localStorage.getItem(STORAGE_SETTINGS);
     if (savedSettings) {
       settings = { ...settings, ...JSON.parse(savedSettings) };
+    }
+
+    // On iOS/mobile, Google Translate TTS is blocked by CORS.
+    // Auto-switch to system engine and clear any Google voiceURI (doesn't exist on iOS).
+    if (isMobile && settings.engine === 'google') {
+      settings.engine = 'system';
+      // Clear Google voiceURI so populateVoices() will auto-pick the best local voice
+      if (!settings.voiceURI || settings.voiceURI === 'Google US English' ||
+          settings.voiceURI.toLowerCase().includes('google')) {
+        settings.voiceURI = '';
+      }
     }
   } catch (e) {
     console.error("讀取 LocalStorage 發生錯誤，將使用預設值", e);
@@ -286,7 +303,24 @@ function cleanTextForTTS(text, targetLang) {
   return cleaned.trim();
 }
 
+// 從瀏覽器可用語音中自動選出最佳語音（優先 Enhanced > Premium > Natural > Google > 第一個）
+function getBestVoice(lang) {
+  const voices = window.speechSynthesis.getVoices();
+  const targetLang = (lang || 'en-US').toLowerCase().split('-')[0];
+  const langVoices = voices.filter(v => v.lang.toLowerCase().startsWith(targetLang));
+  const pool = langVoices.length > 0 ? langVoices : voices;
+
+  // Priority keywords — iOS Enhanced/Premium voices sound like real humans
+  const priority = ['enhanced', 'premium', 'natural', 'siri', 'google'];
+  for (const kw of priority) {
+    const match = pool.find(v => v.name.toLowerCase().includes(kw));
+    if (match) return match;
+  }
+  return pool[0] || null;
+}
+
 // 播放 Google 高品質網路語音 (免費、免 Key、CORS 友善)
+// ⚠️ 注意：translate.google.com 的 TTS API 在 iOS/行動端會被 CORS 阻擋，會自動 fallback 至系統語音
 function playGoogleTTS(text, callback) {
   const lang = detectLanguage(text);
   let cleanedText = cleanTextForTTS(text, lang);
@@ -333,24 +367,36 @@ function playGoogleTTS(text, callback) {
     if (callback) callback();
   };
   
+  // Fallback helper：自動選最佳系統語音再播（解決 iOS CORS 阻擋後音質差的問題）
+  const fallbackToSystem = () => {
+    const lang = detectLanguage(text);
+    const bestVoice = getBestVoice(lang);
+    const savedVoiceURI = settings.voiceURI;
+    if (bestVoice) settings.voiceURI = bestVoice.voiceURI;
+    playSystemTTS(text, () => {
+      settings.voiceURI = savedVoiceURI;
+      if (callback) callback();
+    });
+  };
+
   globalAudio.onerror = (err) => {
     console.error("Google TTS error:", err);
     cleanupListeners();
-    console.warn("Google 語音播放出錯，自動降級嘗試使用系統發音...");
-    playSystemTTS(text, callback);
+    console.warn("Google 語音播放出錯（可能為 iOS/行動端 CORS 限制），自動降級至最佳系統語音...");
+    fallbackToSystem();
   };
-  
+
   function cleanupListeners() {
     globalAudio.onended = null;
     globalAudio.onerror = null;
     globalAudio.onloadedmetadata = null;
   }
-  
+
   globalAudio.play().catch(err => {
     console.error("Google Audio play failed:", err);
     cleanupListeners();
-    console.warn("Google 語音播放失敗，自動降級嘗試使用系統發音...");
-    playSystemTTS(text, callback);
+    console.warn("Google 語音播放失敗（可能為 iOS/行動端 CORS 限制），自動降級至最佳系統語音...");
+    fallbackToSystem();
   });
 }
 
@@ -1095,16 +1141,25 @@ function populateVoices() {
     voiceSelect.appendChild(option);
   });
   
+  // On mobile: if voiceURI is empty or points to a Google voice (unavailable on iOS),
+  // auto-pick the best Enhanced/Premium local voice
+  if (isMobile && (!settings.voiceURI || settings.voiceURI.toLowerCase().includes('google'))) {
+    const bestVoice = getBestVoice(settings.lang || 'en-US');
+    if (bestVoice) {
+      settings.voiceURI = bestVoice.voiceURI;
+    }
+  }
+
   // Match current URI selection
   if (settings.voiceURI) {
     voiceSelect.value = settings.voiceURI;
   }
-  
+
   // If no matched voice was selected, default to the first voice in the sorted dropdown (first high quality voice)
   if (!voiceSelect.value && voiceSelect.options.length > 0) {
     voiceSelect.selectedIndex = 0;
   }
-  
+
   // Update setting in case current selection has become invalid or was newly set
   if (voiceSelect.value) {
     settings.voiceURI = voiceSelect.value;
