@@ -292,15 +292,15 @@ function cleanTextForTTS(text, targetLang) {
   return cleaned.trim();
 }
 
-// 從瀏覽器可用語音中自動選出最佳語音（優先 Enhanced > Premium > Natural > Google > 第一個）
+// 從瀏覽器可用語音中自動選出最佳語音（優先 Enhanced > Premium > 增強音質 > 高音質 > Natural > Siri > Google > 第一個）
 function getBestVoice(lang) {
   const voices = window.speechSynthesis.getVoices();
   const targetLang = (lang || 'en-US').toLowerCase().split('-')[0];
-  const langVoices = voices.filter(v => v.lang.toLowerCase().startsWith(targetLang));
+  const langVoices = voices.filter(v => v.lang && v.lang.toLowerCase().replace('_', '-').startsWith(targetLang));
   const pool = langVoices.length > 0 ? langVoices : voices;
 
   // Priority keywords — iOS Enhanced/Premium voices sound like real humans
-  const priority = ['enhanced', 'premium', 'natural', 'siri', 'google'];
+  const priority = ['enhanced', 'premium', '增強音質', '高音質', 'natural', 'siri', 'google'];
   for (const kw of priority) {
     const match = pool.find(v => v.name.toLowerCase().includes(kw));
     if (match) return match;
@@ -1108,7 +1108,7 @@ function populateVoices() {
   // Quality tiers (works even when no 'Enhanced' label exists)
   const qualityTier = (v) => {
     const n = v.name.toLowerCase();
-    if (n.includes('enhanced') || n.includes('premium')) return 3;
+    if (n.includes('enhanced') || n.includes('premium') || n.includes('增強音質') || n.includes('高音質') || n.includes('增強')) return 3;
     if (n.includes('natural') || n.includes('siri') || n.includes('google') || !v.localService) return 2;
     return 1;
   };
