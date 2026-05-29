@@ -62,18 +62,7 @@ function loadData() {
     if (savedSettings) {
       settings = { ...settings, ...JSON.parse(savedSettings) };
     }
-
-    // On iOS/mobile, Google Translate TTS is blocked by CORS.
-    // Auto-switch to system engine and clear any Google voiceURI (doesn't exist on iOS).
-    if (isMobile && settings.engine === 'google') {
-      settings.engine = 'system';
-      // Clear Google voiceURI so populateVoices() will auto-pick the best local voice
-      if (!settings.voiceURI || settings.voiceURI === 'Google US English' ||
-          settings.voiceURI.toLowerCase().includes('google')) {
-        settings.voiceURI = '';
-      }
-    }
-  } catch (e) {
+    } catch (e) {
     console.error("讀取 LocalStorage 發生錯誤，將使用預設值", e);
   }
 }
@@ -1111,8 +1100,9 @@ function populateVoices() {
   voiceSelect.innerHTML = "";
   
   // Filter voices matching selected lang — show ALL if none match
+  // Safe filtering: guards against null/undefined lang, and standardizes underscores to hyphens (useful for iOS)
   const targetLang = settings.lang.toLowerCase().split('-')[0];
-  const filteredVoices = voices.filter(v => v.lang.toLowerCase().startsWith(targetLang));
+  const filteredVoices = voices.filter(v => v.lang && v.lang.toLowerCase().replace('_', '-').startsWith(targetLang));
   const listToUse = filteredVoices.length > 0 ? filteredVoices : voices;
 
   // Quality tiers (works even when no 'Enhanced' label exists)
@@ -1142,21 +1132,6 @@ function populateVoices() {
     option.textContent = `${tierLabel(voice)}${voice.name} (${voice.lang})`;
     voiceSelect.appendChild(option);
   });
-
-  // Update voice help text to show total count
-  const helpEl = document.getElementById('voice-help-text');
-  if (helpEl) {
-    helpEl.textContent = `找到 ${listToUse.length} 個語音。點「▶ 試聽」聽看看，選最自然的一個。`;
-  }
-  
-  // On mobile: if voiceURI is empty or points to a Google voice (unavailable on iOS),
-  // auto-pick the best Enhanced/Premium local voice
-  if (isMobile && (!settings.voiceURI || settings.voiceURI.toLowerCase().includes('google'))) {
-    const bestVoice = getBestVoice(settings.lang || 'en-US');
-    if (bestVoice) {
-      settings.voiceURI = bestVoice.voiceURI;
-    }
-  }
 
   // Match current URI selection
   if (settings.voiceURI) {
@@ -1208,31 +1183,18 @@ function initSettingsUI() {
   document.getElementById("settings-openai-key").value = settings.openaiApiKey || '';
   document.getElementById("settings-openai-voice").value = settings.openaiVoice || 'alloy';
 
-  // iOS/Mobile 專屬 UI 處理
-  if (isMobile) {
-    // 顯示 iOS 說明橫幅，隱藏引擎選擇器（Google/OpenAI 在 iOS 不可用）
-    const banner = document.getElementById("ios-voice-banner");
-    const engineGroup = document.getElementById("engine-config-group");
-    if (banner) banner.style.display = "block";
-    if (engineGroup) engineGroup.style.display = "none";
-
-    // 更新橫幅裡的「目前使用語音」名稱
-    const currentVoiceEl = document.getElementById("ios-current-voice");
-    if (currentVoiceEl && settings.voiceURI) {
-      const voices = window.speechSynthesis.getVoices();
-      const matched = voices.find(v => v.voiceURI === settings.voiceURI);
-      if (matched) currentVoiceEl.textContent = ` ${matched.name}`;
-    }
-
-    // 強制顯示系統語音選擇器，讓用戶可以手動挑選
-    const sysVoiceGroup = document.getElementById("system-voice-config-group");
-    if (sysVoiceGroup) sysVoiceGroup.style.display = "flex";
-  } else {
-    // 非 mobile：正常切換
-    toggleEngineFields(settings.engine || 'google');
-  }
+  // 依據目前選用的引擎正常切換顯隱，開放 Google/OpenAI TTS 給行動端使用
+  toggleEngineFields(settings.engine || 'google');
 
   populateVoices();
+
+  // iOS Safari 異步載入語音包的輪詢機制，每次打開設定視窗時在 1.5 秒內輪詢 5 次
+  let modalVoicePollCount = 0;
+  const pollInterval = setInterval(() => {
+    populateVoices();
+    modalVoicePollCount++;
+    if (modalVoicePollCount > 5) clearInterval(pollInterval);
+  }, 300);
 }
 
 // --- 8. Event Binding & Initialization on DOMContentLoaded ---
@@ -1258,6 +1220,18 @@ document.addEventListener("DOMContentLoaded", () => {
   if (window.speechSynthesis.onvoiceschanged !== undefined) {
     window.speechSynthesis.onvoiceschanged = populateVoices;
   }
+  // 啟動延時輪詢，解決行動端 iOS Safari 在頁面載入時 getVoices() 常常回傳空陣列的 Bug
+  let voiceRetryCount = 0;
+  const initVoicePoll = setInterval(() => {
+    const voices = window.speechSynthesis.getVoices();
+    if (voices.length > 0) {
+      populateVoices();
+      clearInterval(initVoicePoll);
+    } else if (voiceRetryCount > 10) {
+      clearInterval(initVoicePoll);
+    }
+    voiceRetryCount++;
+  }, 300);
   
   // A. CSV File Upload Listeners
   const dropZone = document.getElementById("drop-zone");
@@ -1396,33 +1370,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   
   // 試聽按鈕：用選單目前選的語音朗讀一段示範句子
-  const btnTestVoice = document.getElementById("btn-test-voice");
-  if (btnTestVoice) {
-    btnTestVoice.addEventListener("click", () => {
-      const voiceSelect = document.getElementById("settings-voice");
-      const selectedURI = voiceSelect ? voiceSelect.value : '';
-      const sampleText = settings.lang.startsWith('ja') ? 'こんにちは、よろしくお願いします。' :
-                         settings.lang.startsWith('ko') ? '안녕하세요, 잘 부탁드립니다.' :
-                         settings.lang.startsWith('zh') ? '你好，很高興認識你。' :
-                         'Hello! This is a voice preview. How does it sound?';
 
-      window.speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(sampleText);
-      u.lang = settings.lang || 'en-US';
-      u.rate = settings.speed || 1.0;
-      if (selectedURI) {
-        const matched = window.speechSynthesis.getVoices().find(v => v.voiceURI === selectedURI);
-        if (matched) u.voice = matched;
-      }
-      btnTestVoice.textContent = '🔊 播放中…';
-      btnTestVoice.disabled = true;
-      u.onend = u.onerror = () => {
-        btnTestVoice.textContent = '▶ 試聽';
-        btnTestVoice.disabled = false;
-      };
-      window.speechSynthesis.speak(u);
-    });
-  }
 
   // Lang input listener to refresh voice selections
   const langInput = document.getElementById("settings-lang");

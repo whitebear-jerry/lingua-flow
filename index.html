@@ -166,19 +166,7 @@
         <div class="modal-body">
           <form id="settings-form">
 
-            <!-- iOS 專屬提示橫幅（JS 偵測到 iPhone 才顯示） -->
-            <div id="ios-voice-banner" style="display:none; background:rgba(139,92,246,0.12); border:1px solid rgba(139,92,246,0.35); border-radius:12px; padding:14px 16px; margin-bottom:16px;">
-              <div style="font-weight:600; color:#a78bfa; margin-bottom:6px;">📱 iPhone 語音說明</div>
-              <div style="font-size:0.85rem; color:rgba(255,255,255,0.8); line-height:1.6;">
-                iPhone 不支援 Google 網路語音（iOS 系統限制），目前使用<strong id="ios-current-voice" style="color:#c4b5fd;">系統內建語音</strong>。<br><br>
-                <strong>🔼 想要更自然的聲音？</strong>請在 iPhone 設定下載 Enhanced 語音包：<br>
-                <span style="color:#a78bfa;">設定 → 輔助使用 → 閱讀與朗讀 → 聲音 → English</span><br>
-                找到 <strong>Ava / Samantha / Nicky</strong>，點旁邊的 ☁️ 下載，<br>
-                下載後回到這裡重新整理頁面，音色清單會自動更新！
-              </div>
-            </div>
-
-            <!-- Speech Engine Selection（iPhone 上自動隱藏） -->
+            <!-- Speech Engine Selection -->
             <div class="form-group" id="engine-config-group">
               <label for="settings-engine">🔊 語音發音引擎 (Speech Engine)</label>
               <select id="settings-engine" class="dropdown-style">
@@ -186,7 +174,6 @@
                 <option value="google">🌐 Google 高品質網路語音 (免費/免 Key/標準流暢)</option>
                 <option value="openai">🤖 OpenAI 頂級真人 AI 語音 (極致真人/需 API Key)</option>
               </select>
-              <small class="form-help">如果覺得手機系統發音不標準，推薦切換至「Google 高品質」或「OpenAI 真人語音」。</small>
             </div>
 
             <!-- Lang Input -->
@@ -203,30 +190,20 @@
                 <option value="fr-FR">🇫🇷 法語 (fr-FR)</option>
                 <option value="de-DE">🇩🇪 德語 (de-DE)</option>
               </select>
-              <small class="form-help">選擇您要學習與朗讀的目標語言，語音引擎會自動適配對應口音。</small>
             </div>
 
             <!-- Voice select -->
             <div class="form-group" id="system-voice-config-group">
               <label for="settings-voice">🗣️ 系統朗讀音色選擇 (System Voices)</label>
-              <div style="display:flex; gap:8px; align-items:center;">
-                <select id="settings-voice" class="dropdown-style" style="flex:1;">
-                  <!-- Dynamically populated native system voices -->
-                </select>
-                <button type="button" id="btn-test-voice" style="
-                  flex-shrink:0; padding:8px 14px; border-radius:10px;
-                  background:rgba(139,92,246,0.2); border:1px solid rgba(139,92,246,0.4);
-                  color:#c4b5fd; font-size:0.85rem; cursor:pointer; white-space:nowrap;
-                  transition: background 0.2s;">▶ 試聽</button>
-              </div>
-              <small class="form-help" id="voice-help-text">點「試聽」聽看看這個聲音，選出最自然的一個。</small>
+              <select id="settings-voice" class="dropdown-style">
+                <!-- Dynamically populated native system voices -->
+              </select>
             </div>
 
             <!-- OpenAI Config Group -->
             <div id="openai-config-group" class="form-group" style="display: none;">
               <label for="settings-openai-key">🔑 OpenAI API Key</label>
               <input type="password" id="settings-openai-key" placeholder="sk-proj-...">
-              <small class="form-help">密鑰儲存於本機 LocalStorage 中，直接發送至 OpenAI，安全不外洩。</small>
               
               <label for="settings-openai-voice" style="margin-top: 12px; display: block;">🎭 OpenAI 真人音色選擇</label>
               <select id="settings-openai-voice" class="dropdown-style">
