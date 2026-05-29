@@ -209,10 +209,17 @@
             <!-- Voice select -->
             <div class="form-group" id="system-voice-config-group">
               <label for="settings-voice">🗣️ 系統朗讀音色選擇 (System Voices)</label>
-              <select id="settings-voice" class="dropdown-style">
-                <!-- Dynamically populated native system voices -->
-              </select>
-              <small class="form-help">音色源於您目前的瀏覽器與作業系統內建語音引擎。</small>
+              <div style="display:flex; gap:8px; align-items:center;">
+                <select id="settings-voice" class="dropdown-style" style="flex:1;">
+                  <!-- Dynamically populated native system voices -->
+                </select>
+                <button type="button" id="btn-test-voice" style="
+                  flex-shrink:0; padding:8px 14px; border-radius:10px;
+                  background:rgba(139,92,246,0.2); border:1px solid rgba(139,92,246,0.4);
+                  color:#c4b5fd; font-size:0.85rem; cursor:pointer; white-space:nowrap;
+                  transition: background 0.2s;">▶ 試聽</button>
+              </div>
+              <small class="form-help" id="voice-help-text">點「試聽」聽看看這個聲音，選出最自然的一個。</small>
             </div>
 
             <!-- OpenAI Config Group -->

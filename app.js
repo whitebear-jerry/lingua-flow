@@ -1110,36 +1110,44 @@ function populateVoices() {
   const voices = window.speechSynthesis.getVoices();
   voiceSelect.innerHTML = "";
   
-  // Filter voices matching selected settings.lang
+  // Filter voices matching selected lang — show ALL if none match
   const targetLang = settings.lang.toLowerCase().split('-')[0];
   const filteredVoices = voices.filter(v => v.lang.toLowerCase().startsWith(targetLang));
-  
   const listToUse = filteredVoices.length > 0 ? filteredVoices : voices;
-  
-  // Helper to identify high quality voice
-  const isHighQuality = (v) => {
-    const name = v.name.toLowerCase();
-    const uri = v.voiceURI.toLowerCase();
-    return name.includes('google') || name.includes('online') || name.includes('natural') || 
-           name.includes('siri') || name.includes('premium') || name.includes('enhanced') ||
-           uri.includes('google') || uri.includes('online') || uri.includes('natural') || 
-           uri.includes('siri') || uri.includes('premium') || uri.includes('enhanced');
+
+  // Quality tiers (works even when no 'Enhanced' label exists)
+  const qualityTier = (v) => {
+    const n = v.name.toLowerCase();
+    if (n.includes('enhanced') || n.includes('premium')) return 3;
+    if (n.includes('natural') || n.includes('siri') || n.includes('google') || !v.localService) return 2;
+    return 1;
   };
-  
-  // Sort high-quality voices to the top
+
+  // Sort: highest quality first, then alphabetical
   listToUse.sort((a, b) => {
-    const aHQ = isHighQuality(a) ? 1 : 0;
-    const bHQ = isHighQuality(b) ? 1 : 0;
-    return bHQ - aHQ;
+    const diff = qualityTier(b) - qualityTier(a);
+    return diff !== 0 ? diff : a.name.localeCompare(b.name);
   });
-  
+
+  const tierLabel = (v) => {
+    const t = qualityTier(v);
+    if (t === 3) return '🔥 ';
+    if (t === 2) return '⭐ ';
+    return '';
+  };
+
   listToUse.forEach(voice => {
     const option = document.createElement("option");
     option.value = voice.voiceURI;
-    const hqPrefix = isHighQuality(voice) ? "🔥 [高品質] " : "";
-    option.textContent = `${hqPrefix}${voice.name} (${voice.lang})`;
+    option.textContent = `${tierLabel(voice)}${voice.name} (${voice.lang})`;
     voiceSelect.appendChild(option);
   });
+
+  // Update voice help text to show total count
+  const helpEl = document.getElementById('voice-help-text');
+  if (helpEl) {
+    helpEl.textContent = `找到 ${listToUse.length} 個語音。點「▶ 試聽」聽看看，選最自然的一個。`;
+  }
   
   // On mobile: if voiceURI is empty or points to a Google voice (unavailable on iOS),
   // auto-pick the best Enhanced/Premium local voice
@@ -1387,6 +1395,35 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
   
+  // 試聽按鈕：用選單目前選的語音朗讀一段示範句子
+  const btnTestVoice = document.getElementById("btn-test-voice");
+  if (btnTestVoice) {
+    btnTestVoice.addEventListener("click", () => {
+      const voiceSelect = document.getElementById("settings-voice");
+      const selectedURI = voiceSelect ? voiceSelect.value : '';
+      const sampleText = settings.lang.startsWith('ja') ? 'こんにちは、よろしくお願いします。' :
+                         settings.lang.startsWith('ko') ? '안녕하세요, 잘 부탁드립니다.' :
+                         settings.lang.startsWith('zh') ? '你好，很高興認識你。' :
+                         'Hello! This is a voice preview. How does it sound?';
+
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(sampleText);
+      u.lang = settings.lang || 'en-US';
+      u.rate = settings.speed || 1.0;
+      if (selectedURI) {
+        const matched = window.speechSynthesis.getVoices().find(v => v.voiceURI === selectedURI);
+        if (matched) u.voice = matched;
+      }
+      btnTestVoice.textContent = '🔊 播放中…';
+      btnTestVoice.disabled = true;
+      u.onend = u.onerror = () => {
+        btnTestVoice.textContent = '▶ 試聽';
+        btnTestVoice.disabled = false;
+      };
+      window.speechSynthesis.speak(u);
+    });
+  }
+
   // Lang input listener to refresh voice selections
   const langInput = document.getElementById("settings-lang");
   if (langInput) {
