@@ -1106,17 +1106,26 @@ function populateVoices() {
   // Quality tier helper
   const qualityTier = (v) => {
     const n = v.name.toLowerCase();
-    // Support English enhanced keywords and Traditional Chinese iOS translation keywords ('新奇' for Nicky, '增強', '高音質')
-    if (n.includes('enhanced') || n.includes('premium') || n.includes('增強音質') || n.includes('高音質') || n.includes('增強') || n.includes('新奇') || n.includes('nicky')) return 3;
-    if (n.includes('natural') || n.includes('siri') || n.includes('google') || !v.localService) return 2;
-    return 1;
+    // Premium / Siri / Enhanced / Nicky (新奇)
+    if (n.includes('enhanced') || n.includes('premium') || n.includes('增強音質') || n.includes('高音質') || n.includes('增強') || n.includes('新奇') || n.includes('nicky') || n.includes('siri')) return 3;
+    
+    // Natural / Google or standard good local voices (Daniel, Samantha, Karen, Moira, Tessa)
+    if (n.includes('natural') || n.includes('google') || !v.localService ||
+        n.includes('daniel') || n.includes('samantha') || n.includes('karen') || n.includes('moira') || n.includes('tessa')) return 2;
+    
+    return 1; // Basic/Retro mechanical voices (like Bad News, Bahh, Fred, Kathy, Jester)
   };
   
-  // Redesigned: Sort the entire comprehensive list of voices
+  // Filter: ONLY keep high-quality voices (tier 2 and tier 3)
+  // This completely eliminates junk mechanical voices like Bad News, Bahh, Bells, Fred, Kathy, Jester, etc.
+  const highQualityVoices = voices.filter(v => qualityTier(v) >= 2);
+  const listToUse = highQualityVoices.length > 0 ? highQualityVoices : voices;
+  
+  // Redesigned: Sort the comprehensive high-quality list of voices
   // 1. Matches target language first.
   // 2. Higher quality tier first (Enhanced / Siri).
   // 3. Alphabetical by name.
-  const sortedVoices = [...voices].sort((a, b) => {
+  const sortedVoices = [...listToUse].sort((a, b) => {
     const aLangMatch = a.lang && a.lang.toLowerCase().replace('_', '-').startsWith(targetLang);
     const bLangMatch = b.lang && b.lang.toLowerCase().replace('_', '-').startsWith(targetLang);
     
