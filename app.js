@@ -17,7 +17,7 @@ let settings = {
   speed: 1.0,
   singleRepeat: 5,
   gap: 1.0,
-  engine: 'google',       // 預設為高品質免 Key 的 Google 語音
+  engine: 'system',       // 預設為系統內建語音，以便直接呈現並可選擇高品質 iOS 系統語音
   openaiApiKey: '',       // OpenAI API 密鑰
   openaiVoice: 'alloy'    // OpenAI 推薦真人音色
 };
