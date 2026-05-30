@@ -166,16 +166,6 @@
         <div class="modal-body">
           <form id="settings-form">
 
-            <!-- Speech Engine Selection -->
-            <div class="form-group" id="engine-config-group">
-              <label for="settings-engine">🔊 語音發音引擎 (Speech Engine)</label>
-              <select id="settings-engine" class="dropdown-style">
-                <option value="system">🗣️ 系統內建語音 (免網路/音色依裝置)</option>
-                <option value="google">🌐 Google 高品質網路語音 (免費/免 Key/標準流暢)</option>
-                <option value="openai">🤖 OpenAI 頂級真人 AI 語音 (極致真人/需 API Key)</option>
-              </select>
-            </div>
-
             <!-- Lang Input -->
             <div class="form-group" id="lang-config-group">
               <label for="settings-lang">🌐 學習目標語言 (Target Language)</label>
@@ -197,22 +187,6 @@
               <label for="settings-voice">🗣️ 系統朗讀音色選擇 (System Voices)</label>
               <select id="settings-voice" class="dropdown-style">
                 <!-- Dynamically populated native system voices -->
-              </select>
-            </div>
-
-            <!-- OpenAI Config Group -->
-            <div id="openai-config-group" class="form-group" style="display: none;">
-              <label for="settings-openai-key">🔑 OpenAI API Key</label>
-              <input type="password" id="settings-openai-key" placeholder="sk-proj-...">
-              
-              <label for="settings-openai-voice" style="margin-top: 12px; display: block;">🎭 OpenAI 真人音色選擇</label>
-              <select id="settings-openai-voice" class="dropdown-style">
-                <option value="alloy">Alloy (推薦 - 中性溫和)</option>
-                <option value="echo">Echo (沈穩男聲)</option>
-                <option value="fable">Fable (獨特中性偏男聲)</option>
-                <option value="onyx">Onyx (厚實男低音)</option>
-                <option value="nova">Nova (甜美女性活力聲音)</option>
-                <option value="shimmer">Shimmer (專業女聲)</option>
               </select>
             </div>
 

@@ -292,204 +292,7 @@ function cleanTextForTTS(text, targetLang) {
   return cleaned.trim();
 }
 
-// 從瀏覽器可用語音中自動選出最佳語音（優先 Enhanced > Premium > 增強音質 > 高音質 > Natural > Siri > Google > 第一個）
-function getBestVoice(lang) {
-  const voices = window.speechSynthesis.getVoices();
-  const targetLang = (lang || 'en-US').toLowerCase().split('-')[0];
-  const langVoices = voices.filter(v => v.lang && v.lang.toLowerCase().replace('_', '-').startsWith(targetLang));
-  const pool = langVoices.length > 0 ? langVoices : voices;
-
-  // Priority keywords — iOS Enhanced/Premium voices sound like real humans
-  const priority = ['enhanced', 'premium', '增強音質', '高音質', 'natural', 'siri', 'google'];
-  for (const kw of priority) {
-    const match = pool.find(v => v.name.toLowerCase().includes(kw));
-    if (match) return match;
-  }
-  return pool[0] || null;
-}
-
-// 播放 Google 高品質網路語音 (免費、免 Key、CORS 友善)
-// ⚠️ 注意：translate.google.com 的 TTS API 在 iOS/行動端會被 CORS 阻擋，會自動 fallback 至系統語音
-function playGoogleTTS(text, callback) {
-  const lang = detectLanguage(text);
-  let cleanedText = cleanTextForTTS(text, lang);
-  
-  // 限制 200 字以內，防範 Google Translate 官方接口字數上限報錯
-  if (cleanedText.length > 200) {
-    cleanedText = cleanedText.substring(0, 199);
-  }
-  
-  // 使用 translate.google.com 搭配 client=tw-ob，這被社群證實能取得更高品質、更自然的 Neural/WaveNet 朗讀音色
-  const url = `https://translate.google.com/translate_tts?ie=UTF-8&tl=${encodeURIComponent(lang)}&client=tw-ob&q=${encodeURIComponent(cleanedText)}`;
-  
-  if (!globalAudio) {
-    globalAudio = new Audio();
-  }
-  
-  cancelAllSpeech();
-  
-  globalAudio.src = url;
-  
-  // 設定防變調與變速邏輯，適用於所有瀏覽器（包含 iOS Safari）
-  const applySpeedAndPitch = () => {
-    try {
-      globalAudio.playbackRate = settings.speed || 1.0;
-      if ('preservesPitch' in globalAudio) {
-        globalAudio.preservesPitch = true;
-      } else if ('webkitPreservesPitch' in globalAudio) {
-        globalAudio.webkitPreservesPitch = true;
-      }
-    } catch (e) {
-      console.warn("Failed to apply speed/pitch on Google Audio:", e);
-    }
-  };
-  
-  globalAudio.onloadedmetadata = applySpeedAndPitch;
-  
-  // 只有當 readyState 大於 0 (已經載入 metadata) 時才安全套用，防範 iOS Safari 報錯中斷載入
-  if (globalAudio.readyState > 0) {
-    applySpeedAndPitch();
-  }
-  
-  globalAudio.onended = () => {
-    cleanupListeners();
-    if (callback) callback();
-  };
-  
-  // Fallback helper：自動選最佳系統語音再播（解決 iOS CORS 阻擋後音質差的問題）
-  const fallbackToSystem = () => {
-    const lang = detectLanguage(text);
-    const bestVoice = getBestVoice(lang);
-    const savedVoiceURI = settings.voiceURI;
-    if (bestVoice) settings.voiceURI = bestVoice.voiceURI;
-    playSystemTTS(text, () => {
-      settings.voiceURI = savedVoiceURI;
-      if (callback) callback();
-    });
-  };
-
-  globalAudio.onerror = (err) => {
-    console.error("Google TTS error:", err);
-    cleanupListeners();
-    console.warn("Google 語音播放出錯（可能為 iOS/行動端 CORS 限制），自動降級至最佳系統語音...");
-    fallbackToSystem();
-  };
-
-  function cleanupListeners() {
-    globalAudio.onended = null;
-    globalAudio.onerror = null;
-    globalAudio.onloadedmetadata = null;
-  }
-
-  globalAudio.play().catch(err => {
-    console.error("Google Audio play failed:", err);
-    cleanupListeners();
-    console.warn("Google 語音播放失敗（可能為 iOS/行動端 CORS 限制），自動降級至最佳系統語音...");
-    fallbackToSystem();
-  });
-}
-
-// 播放 OpenAI 頂級真人 AI 語音 (極致效果，需 Key)
-async function playOpenAITTS(text, callback) {
-  const apiKey = settings.openaiApiKey;
-  if (!apiKey) {
-    console.warn("未設定 OpenAI API Key，自動降級切換至 Google 高品質語音...");
-    playGoogleTTS(text, callback);
-    return;
-  }
-  
-  const lang = detectLanguage(text);
-  const cleanedText = cleanTextForTTS(text, lang);
-  
-  if (!globalAudio) {
-    globalAudio = new Audio();
-  }
-  
-  cancelAllSpeech();
-  
-  let audioUrl = null;
-  
-  try {
-    const response = await fetch("https://api.openai.com/v1/audio/speech", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${apiKey}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model: "tts-1",
-        input: cleanedText,
-        voice: settings.openaiVoice || 'alloy',
-        speed: settings.speed || 1.0
-      })
-    });
-    
-    if (!response.ok) {
-      const errText = await response.text();
-      throw new Error(`OpenAI API 錯誤: ${response.status} - ${errText}`);
-    }
-    
-    const blob = await response.blob();
-    audioUrl = URL.createObjectURL(blob);
-    
-    globalAudio.src = audioUrl;
-    
-    // 設定防變調與變速邏輯，確保變速行為一致（OpenAI 雖然在 API 端變速，但我們在瀏覽器端依然維持相應控制）
-    const applyPitch = () => {
-      try {
-        globalAudio.playbackRate = 1.0; // speed is already handled by OpenAI API
-        if ('preservesPitch' in globalAudio) {
-          globalAudio.preservesPitch = true;
-        } else if ('webkitPreservesPitch' in globalAudio) {
-          globalAudio.webkitPreservesPitch = true;
-        }
-      } catch (e) {
-        console.warn("Failed to apply pitch on OpenAI Audio:", e);
-      }
-    };
-    
-    globalAudio.onloadedmetadata = applyPitch;
-    
-    if (globalAudio.readyState > 0) {
-      applyPitch();
-    }
-    
-    globalAudio.onended = () => {
-      cleanupListeners();
-      if (audioUrl) URL.revokeObjectURL(audioUrl);
-      if (callback) callback();
-    };
-    
-    globalAudio.onerror = (err) => {
-      console.error("OpenAI TTS Audio error:", err);
-      cleanupListeners();
-      if (audioUrl) URL.revokeObjectURL(audioUrl);
-      console.warn("OpenAI 語音音軌載入失敗，自動降級至 Google 高品質語音...");
-      playGoogleTTS(text, callback);
-    };
-    
-    function cleanupListeners() {
-      globalAudio.onended = null;
-      globalAudio.onerror = null;
-      globalAudio.onloadedmetadata = null;
-    }
-    
-    globalAudio.play().catch(err => {
-      console.error("OpenAI Audio play failed:", err);
-      cleanupListeners();
-      if (audioUrl) URL.revokeObjectURL(audioUrl);
-      console.warn("OpenAI 語音播放出錯，自動降級至 Google 高品質語音...");
-      playGoogleTTS(text, callback);
-    });
-    
-  } catch (error) {
-    console.error("OpenAI TTS 請求錯誤:", error);
-    if (audioUrl) URL.revokeObjectURL(audioUrl);
-    playGoogleTTS(text, callback);
-  }
-}
-
-// 播放系統內建 TTS 語音 (Web Speech API, 回退引擎)
+// 播放系統內建 TTS 語音 (Web Speech API)
 function playSystemTTS(text, callback) {
   const lang = detectLanguage(text);
   let cleanedText = cleanTextForTTS(text, lang);
@@ -539,7 +342,6 @@ function playSystemTTS(text, callback) {
   window.speechSynthesis.speak(utterance);
 }
 
-
 // Speaks a single text string and executes a callback on completion
 function speakSingle(text, callback) {
   cancelAllSpeech(); // 每次開始前先停止所有 ongoing 語音
@@ -549,14 +351,7 @@ function speakSingle(text, callback) {
     return;
   }
   
-  // 依引擎分流
-  if (settings.engine === 'google') {
-    playGoogleTTS(text, callback);
-  } else if (settings.engine === 'openai') {
-    playOpenAITTS(text, callback);
-  } else {
-    playSystemTTS(text, callback);
-  }
+  playSystemTTS(text, callback);
 }
 
 // Handles N-times loops recursively using speechSynthesis events
@@ -1179,42 +974,13 @@ function populateVoices() {
   }
 }
 
-// 動態控制設定 Modal 欄位顯隱
-function toggleEngineFields(engine) {
-  const systemVoiceGroup = document.getElementById("system-voice-config-group");
-  const openaiConfigGroup = document.getElementById("openai-config-group");
-  const langConfigGroup = document.getElementById("lang-config-group");
-  
-  if (engine === 'system') {
-    if (systemVoiceGroup) systemVoiceGroup.style.display = "flex";
-    if (openaiConfigGroup) openaiConfigGroup.style.display = "none";
-    if (langConfigGroup) langConfigGroup.style.display = "flex";
-  } else if (engine === 'google') {
-    if (systemVoiceGroup) systemVoiceGroup.style.display = "none";
-    if (openaiConfigGroup) openaiConfigGroup.style.display = "none";
-    if (langConfigGroup) langConfigGroup.style.display = "flex";
-  } else if (engine === 'openai') {
-    if (systemVoiceGroup) systemVoiceGroup.style.display = "none";
-    if (openaiConfigGroup) openaiConfigGroup.style.display = "flex";
-    if (langConfigGroup) langConfigGroup.style.display = "flex";
-  }
-}
-
 // Initialize settings form with current state
 function initSettingsUI() {
-  document.getElementById("settings-engine").value = settings.engine || 'google';
   document.getElementById("settings-lang").value = settings.lang;
   document.getElementById("settings-speed").value = settings.speed;
   document.getElementById("speed-val").textContent = `${settings.speed}x`;
   document.getElementById("settings-single-repeat").value = settings.singleRepeat;
   document.getElementById("settings-gap").value = settings.gap;
-
-  // OpenAI 相關
-  document.getElementById("settings-openai-key").value = settings.openaiApiKey || '';
-  document.getElementById("settings-openai-voice").value = settings.openaiVoice || 'alloy';
-
-  // 依據目前選用的引擎正常切換顯隱，開放 Google/OpenAI TTS 給行動端使用
-  toggleEngineFields(settings.engine || 'google');
 
   populateVoices();
 
@@ -1378,16 +1144,11 @@ document.addEventListener("DOMContentLoaded", () => {
       btnSaveSettings.addEventListener("click", (e) => {
         e.preventDefault();
         
-        settings.engine = document.getElementById("settings-engine").value || 'google';
         settings.lang = document.getElementById("settings-lang").value.trim() || 'en-US';
         settings.voiceURI = document.getElementById("settings-voice").value;
         settings.speed = parseFloat(document.getElementById("settings-speed").value);
         settings.singleRepeat = parseInt(document.getElementById("settings-single-repeat").value);
         settings.gap = parseFloat(document.getElementById("settings-gap").value);
-        
-        // OpenAI 相關
-        settings.openaiApiKey = document.getElementById("settings-openai-key").value.trim();
-        settings.openaiVoice = document.getElementById("settings-openai-voice").value || 'alloy';
         
         saveData();
         hideSettings();
@@ -1399,23 +1160,12 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
   
-  // 試聽按鈕：用選單目前選的語音朗讀一段示範句子
-
-
   // Lang input listener to refresh voice selections
   const langInput = document.getElementById("settings-lang");
   if (langInput) {
     langInput.addEventListener("change", () => {
       settings.lang = langInput.value.trim() || 'en-US';
       populateVoices();
-    });
-  }
-  
-  // Engine select listener to toggle fields
-  const engineSelect = document.getElementById("settings-engine");
-  if (engineSelect) {
-    engineSelect.addEventListener("change", (e) => {
-      toggleEngineFields(e.target.value);
     });
   }
   
