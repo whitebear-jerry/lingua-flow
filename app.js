@@ -1106,12 +1106,13 @@ function populateVoices() {
   // Quality tier helper
   const qualityTier = (v) => {
     const n = v.name.toLowerCase();
-    // Premium / Siri / Enhanced / Nicky (新奇)
-    if (n.includes('enhanced') || n.includes('premium') || n.includes('增強音質') || n.includes('高音質') || n.includes('增強') || n.includes('新奇') || n.includes('nicky') || n.includes('siri')) return 3;
+    // Premium / Siri / Enhanced / Nicky (新奇) / Alex, Evan, Zoe, Jamie, Karen
+    if (n.includes('enhanced') || n.includes('premium') || n.includes('增強音質') || n.includes('高音質') || n.includes('增強') || n.includes('新奇') || n.includes('nicky') || n.includes('siri') ||
+        n.includes('alex') || n.includes('evan') || n.includes('zoe') || n.includes('jamie') || n.includes('karen')) return 3;
     
-    // Natural / Google or standard good local voices (Daniel, Samantha, Karen, Moira, Tessa)
+    // Natural / Google or standard good local voices (Daniel, Samantha, Moira, Tessa)
     if (n.includes('natural') || n.includes('google') || !v.localService ||
-        n.includes('daniel') || n.includes('samantha') || n.includes('karen') || n.includes('moira') || n.includes('tessa')) return 2;
+        n.includes('daniel') || n.includes('samantha') || n.includes('moira') || n.includes('tessa')) return 2;
     
     return 1; // Basic/Retro mechanical voices (like Bad News, Bahh, Fred, Kathy, Jester)
   };
