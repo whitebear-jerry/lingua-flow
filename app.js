@@ -172,11 +172,22 @@ function parse2DArray(lines) {
 }
 
 // Smart Data Merger
+// 行為：累加合併，不取代。
+// - 新 id → 加入，進度從「未開始」開始
+// - 相同 id → 更新句子內容，保留原有進度
+// - 舊有 id 在新 CSV 沒出現 → 繼續保留，不刪除
+// 例：匯入 12 句 + 再匯入 16 句 = 累計 28 句
 function handleCSVSmartMerge(newSentences) {
   const todayStr = new Date().toISOString().split('T')[0];
-  
-  // 1. Maintain progress for sentences still present
+
+  // 把現有句子轉成 Map（以 id 為 key），方便查找與合併
+  const existingMap = new Map(sentences.map(s => [s.id, s]));
+
   newSentences.forEach(s => {
+    // 更新或新增句子內容
+    existingMap.set(s.id, s);
+
+    // 初始化進度（新句子）或更新 lastSeen（已有句子）
     if (!progress[s.id]) {
       progress[s.id] = {
         status: 'unstarted',
@@ -184,13 +195,12 @@ function handleCSVSmartMerge(newSentences) {
         lastSeen: todayStr
       };
     } else {
-      // Keep existing progress intact
       progress[s.id].lastSeen = todayStr;
     }
   });
-  
-  // 2. Sentences removed in CSV will remain in progress object silently (in case they are re-added)
-  sentences = newSentences;
+
+  // 轉回陣列：原有句子在前、新加的接在後
+  sentences = Array.from(existingMap.values());
   saveData();
 }
 
