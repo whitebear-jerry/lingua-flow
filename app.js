@@ -171,36 +171,26 @@ function parse2DArray(lines) {
   return parsedResults;
 }
 
-// Smart Data Merger
-// 行為：累加合併，不取代。
-// - 新 id → 加入，進度從「未開始」開始
-// - 相同 id → 更新句子內容，保留原有進度
-// - 舊有 id 在新 CSV 沒出現 → 繼續保留，不刪除
-// 例：匯入 12 句 + 再匯入 16 句 = 累計 28 句
+// Smart Data Replacer
+// 行為：完整取代（多檔案合併後取代舊資料）。
+// - 匯入 = 本次所有選取檔案的合併結果，完整取代目前資料
+// - 相同 id → 保留原有練習進度（不重置）
+// - 舊有 id 在新資料沒出現 → 進度靜默保留（防誤刪）
+// - 重複 id（跨多個匯入檔）→ 後面的檔案優先
 function handleCSVSmartMerge(newSentences) {
   const todayStr = new Date().toISOString().split('T')[0];
 
-  // 把現有句子轉成 Map（以 id 為 key），方便查找與合併
-  const existingMap = new Map(sentences.map(s => [s.id, s]));
-
+  // 初始化或更新每句的進度
   newSentences.forEach(s => {
-    // 更新或新增句子內容
-    existingMap.set(s.id, s);
-
-    // 初始化進度（新句子）或更新 lastSeen（已有句子）
     if (!progress[s.id]) {
-      progress[s.id] = {
-        status: 'unstarted',
-        playCount: 0,
-        lastSeen: todayStr
-      };
+      progress[s.id] = { status: 'unstarted', playCount: 0, lastSeen: todayStr };
     } else {
       progress[s.id].lastSeen = todayStr;
     }
   });
 
-  // 轉回陣列：原有句子在前、新加的接在後
-  sentences = Array.from(existingMap.values());
+  // 完整取代：本次匯入的所有句子 = 新的完整資料集
+  sentences = newSentences;
   saveData();
 }
 
@@ -1051,87 +1041,105 @@ document.addEventListener("DOMContentLoaded", () => {
       e.preventDefault();
       dropZone.classList.add("dragover");
     });
-    
+
     dropZone.addEventListener("dragleave", () => {
       dropZone.classList.remove("dragover");
     });
-    
+
     dropZone.addEventListener("drop", (e) => {
       e.preventDefault();
       dropZone.classList.remove("dragover");
-      
       const files = e.dataTransfer.files;
-      if (files.length > 0) {
-        handleUploadedFile(files[0]);
-      }
+      if (files.length > 0) handleMultipleFiles(files);
     });
-    
+
     fileInput.addEventListener("change", (e) => {
       const files = e.target.files;
-      if (files.length > 0) {
-        handleUploadedFile(files[0]);
+      if (files.length > 0) handleMultipleFiles(files);
+      e.target.value = ""; // 允許重複選同一檔案
+    });
+  }
+
+  // 解析單一檔案，回傳 Promise<句子陣列>
+  function parseOneFile(file) {
+    return new Promise((resolve, reject) => {
+      const fileName = file.name.toLowerCase();
+      const isExcel = fileName.endsWith(".xlsx") || fileName.endsWith(".xls");
+      const reader = new FileReader();
+
+      reader.onload = function(evt) {
+        try {
+          let parsed = [];
+          if (isExcel) {
+            if (typeof XLSX === "undefined") throw new Error("Excel 解析庫尚未載入，請確認網路連線！");
+            const data = new Uint8Array(evt.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const sheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[sheetName];
+            const lines = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+            const filteredLines = lines.filter(line => line && line.some(cell => cell !== null && cell !== undefined && String(cell).trim() !== ""));
+            parsed = parse2DArray(filteredLines);
+          } else {
+            parsed = parseCSV(evt.target.result);
+          }
+          resolve({ fileName: file.name, sentences: parsed });
+        } catch (err) {
+          reject({ fileName: file.name, error: err.message || "解析失敗" });
+        }
+      };
+
+      reader.onerror = () => reject({ fileName: file.name, error: "讀取檔案失敗" });
+
+      if (isExcel) {
+        reader.readAsArrayBuffer(file);
+      } else {
+        reader.readAsText(file, "UTF-8");
       }
     });
   }
-  
-  function handleUploadedFile(file) {
-    const fileName = file.name.toLowerCase();
-    const isExcel = fileName.endsWith(".xlsx") || fileName.endsWith(".xls");
-    
-    const reader = new FileReader();
-    reader.onload = function(evt) {
-      try {
-        let parsed = [];
-        if (isExcel) {
-          // Check if XLSX library is loaded correctly
-          if (typeof XLSX === "undefined") {
-            throw new Error("Excel 解析庫尚未載入，請確認網路連線是否正常！");
-          }
-          
-          const data = new Uint8Array(evt.target.result);
-          const workbook = XLSX.read(data, { type: 'array' });
-          const sheetName = workbook.SheetNames[0];
-          const worksheet = workbook.Sheets[sheetName];
-          
-          // Convert sheet to a 2D array (header: 1 returns array of arrays)
-          const lines = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-          
-          // Filter out completely empty lines
-          const filteredLines = lines.filter(line => line && line.some(cell => cell !== null && cell !== undefined && String(cell).trim() !== ""));
-          
-          parsed = parse2DArray(filteredLines);
-        } else {
-          const text = evt.target.result;
-          parsed = parseCSV(text);
-        }
-        
-        if (parsed.length === 0) {
-          alert(`上傳成功，但解析出 0 句對話。請確認 ${isExcel ? 'Excel' : 'CSV'} 檔案內是否含有欄位與資料！`);
-          return;
-        }
-        
-        handleCSVSmartMerge(parsed);
-        
-        // Hide welcome screen, render App
-        document.getElementById("welcome-screen").style.display = "none";
-        document.getElementById("learning-screen").style.display = "block";
-        
-        currentPage = 1;
-        updateContextDropdown();
-        renderCards();
-        updateProgressTracker();
-        
-        alert(`🎉 成功匯入 ${parsed.length} 句對話教材！`);
-      } catch (err) {
-        alert(err.message || `解析 ${isExcel ? 'Excel' : 'CSV'} 檔案失敗！請確認檔案欄位格式是否正確。`);
+
+  // 多檔案同時匯入，合併後完整取代現有資料
+  async function handleMultipleFiles(files) {
+    const fileArray = Array.from(files);
+    const results = await Promise.allSettled(fileArray.map(f => parseOneFile(f)));
+
+    const errors = [];
+    // 用 Map 做去重（後面的檔案同 id 優先）
+    const combinedMap = new Map();
+
+    results.forEach(result => {
+      if (result.status === 'fulfilled') {
+        result.value.sentences.forEach(s => combinedMap.set(s.id, s));
+      } else {
+        errors.push(`❌ ${result.reason.fileName}：${result.reason.error}`);
       }
-    };
-    
-    if (isExcel) {
-      reader.readAsArrayBuffer(file);
-    } else {
-      reader.readAsText(file, "UTF-8");
+    });
+
+    const combined = Array.from(combinedMap.values());
+
+    if (combined.length === 0) {
+      const msg = errors.length > 0
+        ? `所有檔案解析失敗：\n${errors.join('\n')}`
+        : "所有檔案解析出 0 句，請確認欄位格式。";
+      alert(msg);
+      return;
     }
+
+    handleCSVSmartMerge(combined);
+
+    document.getElementById("welcome-screen").style.display = "none";
+    document.getElementById("learning-screen").style.display = "block";
+    currentPage = 1;
+    updateContextDropdown();
+    renderCards();
+    updateProgressTracker();
+
+    const successCount = results.filter(r => r.status === 'fulfilled').length;
+    const summary = [
+      `🎉 成功匯入 ${combined.length} 句（來自 ${successCount} 個檔案）`,
+      errors.length > 0 ? `\n⚠️ ${errors.length} 個檔案有問題：\n${errors.join('\n')}` : ''
+    ].join('');
+    alert(summary);
   }
   
   // B. Navigation & Header Button Listeners
