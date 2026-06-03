@@ -491,6 +491,35 @@ body {
   font-family: monospace;
 }
 
+.demo-tips {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.demo-tips p {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  background: rgba(139, 92, 246, 0.06);
+  border-left: 3px solid rgba(139, 92, 246, 0.35);
+  border-radius: 0 8px 8px 0;
+  padding: 8px 12px;
+  margin: 0;
+}
+
+.demo-tips kbd {
+  display: inline-block;
+  padding: 1px 6px;
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 4px;
+  font-size: 0.78rem;
+  font-family: monospace;
+  color: var(--text-primary);
+}
+
 /* Cards Grid */
 .cards-grid {
   display: flex;

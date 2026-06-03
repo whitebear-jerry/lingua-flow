@@ -93,7 +93,7 @@
         <div class="welcome-header">
           <div class="welcome-logo">🎙️</div>
           <h2>歡迎使用 LinguaFlow 語言學習器</h2>
-          <p>上傳您的 CSV 或 Excel 句子表，即刻展開沉浸式口說與背景聽力輸入學習！</p>
+          <p>上傳一份或多份 CSV / Excel 句子表，App 自動合併成完整學習清單，即刻展開沉浸式口說與背景聽力學習！</p>
         </div>
         
         <!-- Drag & Drop Zone -->
@@ -106,17 +106,17 @@
 
         <!-- CSV Format Demo Card -->
         <div class="demo-card">
-          <h4>🗂️ 推薦資料格式欄位 (CSV 或 Excel)：</h4>
-          <p class="demo-desc">包含 <code>target</code> (英文句子) 與 <code>translation</code> (中文翻譯) 即可運作。</p>
+          <h4>🗂️ 資料格式（CSV 或 Excel）</h4>
+          <p class="demo-desc">只需要 <code>target</code>（英文句子）和 <code>translation</code>（中文翻譯）兩欄，其餘選填。欄位名稱支援中英文別名。</p>
           <div class="table-responsive">
             <table class="demo-table">
               <thead>
                 <tr>
-                  <th>id (可選)</th>
-                  <th>target (必填)</th>
-                  <th>translation (必填)</th>
-                  <th>context (選填)</th>
-                  <th>difficulty (選填)</th>
+                  <th>id（可選）</th>
+                  <th>target（必填）</th>
+                  <th>translation（必填）</th>
+                  <th>context（選填）</th>
+                  <th>difficulty（選填）</th>
                 </tr>
               </thead>
               <tbody>
@@ -136,6 +136,10 @@
                 </tr>
               </tbody>
             </table>
+          </div>
+          <div class="demo-tips">
+            <p>💡 <strong>多份表格同時匯入</strong>：按住 <kbd>Cmd</kbd>（Mac）或 <kbd>Ctrl</kbd>（Windows）可一次選多個檔案，或拖曳多個檔案放入。App 自動合併所有句子，重複的自動去除。</p>
+            <p>🔄 <strong>重新匯入 = 完整取代</strong>：每次上傳後，新資料會完整取代舊資料。你可以把句子按主題分成多份表格（例如：職場英語.xlsx、日常對話.csv），每次想練哪幾份就選哪幾份一起匯入。</p>
           </div>
         </div>
       </div>
@@ -227,7 +231,7 @@
             <!-- Action buttons -->
             <div class="settings-actions">
               <button type="button" id="btn-reupload-csv" class="btn btn-secondary btn-full">
-                📂 重新上傳 CSV / Excel (保留進度)
+                📂 重新匯入資料（可選多份，完整取代）
               </button>
               <button type="button" id="btn-clear-progress-trigger" class="btn btn-danger btn-full">
                 🗑️ 清除所有熟悉度進度
