@@ -1104,18 +1104,32 @@ document.addEventListener("DOMContentLoaded", () => {
     const results = await Promise.allSettled(fileArray.map(f => parseOneFile(f)));
 
     const errors = [];
-    // 用 Map 做去重（後面的檔案同 id 優先）
-    const combinedMap = new Map();
 
+    // 先把所有句子依序串接（保留各檔案的順序）
+    const allSentences = [];
     results.forEach(result => {
       if (result.status === 'fulfilled') {
-        result.value.sentences.forEach(s => combinedMap.set(s.id, s));
+        allSentences.push(...result.value.sentences);
       } else {
         errors.push(`❌ ${result.reason.fileName}：${result.reason.error}`);
       }
     });
 
-    const combined = Array.from(combinedMap.values());
+    // 偵測是否有 id 衝突（沒有 id 欄位的檔案每個都從 001 開始，跨檔案一定重複）
+    const idCounts = new Map();
+    allSentences.forEach(s => idCounts.set(s.id, (idCounts.get(s.id) || 0) + 1));
+    const hasIdConflict = [...idCounts.values()].some(c => c > 1);
+
+    let combined;
+    if (hasIdConflict) {
+      // 有衝突 → 全部重新給流水號，確保每句都保留
+      combined = allSentences.map((s, i) => ({ ...s, id: String(i + 1).padStart(3, '0') }));
+    } else {
+      // 無衝突（每個檔案都有明確 id 欄位）→ 用 id 去重，後面的優先
+      const dedupMap = new Map();
+      allSentences.forEach(s => dedupMap.set(s.id, s));
+      combined = Array.from(dedupMap.values());
+    }
 
     if (combined.length === 0) {
       const msg = errors.length > 0
