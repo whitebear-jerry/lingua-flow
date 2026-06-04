@@ -231,20 +231,6 @@ function cancelAllSpeech() {
       console.error("停止音訊播放失敗:", e);
     }
   }
-  
-  // 3. 更新全域暫停/停止按鈕顯示狀態
-  updateStopButtonVisibility();
-}
-
-// 根據目前是否有聲音正在播放，動態顯示/隱藏頂部全域暫停/停止按鈕
-function updateStopButtonVisibility() {
-  const btnStop = document.getElementById("btn-stop-all");
-  if (!btnStop) return;
-  if (activePlayingId !== null || isBrushTeethActive) {
-    btnStop.style.display = "inline-flex";
-  } else {
-    btnStop.style.display = "none";
-  }
 }
 
 
@@ -371,7 +357,7 @@ function speakSingle(text, callback) {
 
 // Handles N-times loops recursively using speechSynthesis events
 function speakRepeat(text, n, count, onComplete, onProgress) {
-  if (count >= n || !activePlayingId) {
+  if (count >= n || !activePlayingId || (isBrushTeethActive && isBrushTeethPaused)) {
     if (onComplete) onComplete();
     return;
   }
@@ -379,6 +365,10 @@ function speakRepeat(text, n, count, onComplete, onProgress) {
   if (onProgress) onProgress(count + 1, n);
   
   speakSingle(text, () => {
+    if (!activePlayingId || (isBrushTeethActive && isBrushTeethPaused)) {
+      if (onComplete) onComplete();
+      return;
+    }
     speakRepeat(text, n, count + 1, onComplete, onProgress);
   });
 }
@@ -460,6 +450,7 @@ function startBrushTeethMode() {
 
 function pauseBrushTeethMode() {
   isBrushTeethPaused = true;
+  activePlayingId = null;
   if (btTimeoutId) clearTimeout(btTimeoutId);
   cancelAllSpeech();
   updateBrushTeethUI();
@@ -866,8 +857,7 @@ function renderCards() {
     grid.appendChild(card);
   });
   
-  // Update visibility of global stop button in header
-  updateStopButtonVisibility();
+  // Update visibility of global stop button in header (Removed)
 }
 
 function cycleSentenceStatus(id) {
@@ -1221,18 +1211,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const modalSettings = document.getElementById("settings-modal");
   const btnCloseSettings = document.getElementById("btn-close-settings");
   const btnSaveSettings = document.getElementById("btn-save-settings");
-  
-  const btnStopAll = document.getElementById("btn-stop-all");
-  if (btnStopAll) {
-    btnStopAll.addEventListener("click", () => {
-      if (isBrushTeethActive) {
-        stopBrushTeethMode();
-      }
-      activePlayingId = null;
-      cancelAllSpeech();
-      renderCards();
-    });
-  }
   
   if (btnSettings && modalSettings) {
     btnSettings.addEventListener("click", () => {
