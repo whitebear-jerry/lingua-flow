@@ -452,9 +452,8 @@ function startBrushTeethMode() {
   isBrushTeethActive = true;
   isBrushTeethPaused = false;
   
-  // 顯示停止按鈕
-  const stopBtn = document.getElementById("btn-brush-teeth-stop");
-  if (stopBtn) stopBtn.style.display = "inline-flex";
+  // 顯示停止按鈕並立即同步更新 UI 狀態
+  updateBrushTeethUI();
   
   playNextBrushTeeth();
 }
@@ -495,6 +494,9 @@ function playNextBrushTeeth() {
   }
   
   const repeatCount = settings.singleRepeat;
+  
+  // 在播放前，立刻先更新一次 UI，使大按鈕立即呈現「準備中/點擊暫停」狀態
+  updateBrushTeethUI(0, repeatCount);
   
   speakRepeat(
     sentence.target,
