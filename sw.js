@@ -1,4 +1,4 @@
-const CACHE_NAME = "linguaflow-v10";
+const CACHE_NAME = "linguaflow-v11";
 const ASSETS = [
   "./",
   "./index.html",

@@ -786,6 +786,23 @@ body {
   box-shadow: 0 0 12px rgba(139, 92, 246, 0.3);
 }
 
+.btn-play-trigger.playing-active {
+  background: var(--primary);
+  color: #ffffff;
+  border-color: var(--primary);
+  box-shadow: 0 0 12px rgba(139, 92, 246, 0.5);
+  animation: pulseStop 1.5s infinite alternate ease-in-out;
+}
+
+@keyframes pulseStop {
+  from {
+    box-shadow: 0 0 8px rgba(139, 92, 246, 0.4);
+  }
+  to {
+    box-shadow: 0 0 16px rgba(139, 92, 246, 0.8);
+  }
+}
+
 /* Custom Dropdown Repeat selector inside card */
 .repeat-dropdown-menu {
   position: absolute;
@@ -1082,8 +1099,16 @@ body {
   }
 }
 
-.btn-brush-teeth-mode {
+.brush-teeth-controls {
+  display: flex;
   width: 100%;
+  gap: 12px;
+  align-items: center;
+  transition: var(--transition-smooth);
+}
+
+.btn-brush-teeth-mode {
+  flex: 1;
   height: 52px;
   border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.05);
@@ -1100,6 +1125,34 @@ body {
   position: relative;
   overflow: hidden;
   transition: var(--transition-smooth);
+}
+
+.btn-brush-teeth-stop {
+  width: 52px;
+  height: 52px;
+  flex-shrink: 0;
+  border-radius: var(--radius-md);
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #f87171;
+  font-size: 1.15rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition-smooth);
+}
+
+.btn-brush-teeth-stop:hover {
+  background: rgba(239, 68, 68, 0.25);
+  border-color: #ef4444;
+  color: #fca5a5;
+  box-shadow: 0 0 15px rgba(239, 68, 68, 0.35);
+  transform: scale(1.05);
+}
+
+.btn-brush-teeth-stop:active {
+  transform: scale(0.95);
 }
 
 .btn-brush-teeth-mode:hover {
@@ -1123,6 +1176,18 @@ body {
 .btn-brush-teeth-mode.active .bt-icon {
   animation: rotateMoon 4s linear infinite;
   color: #34d399;
+}
+
+/* Paused Brush Teeth Mode State */
+.btn-brush-teeth-mode.paused {
+  background: rgba(139, 92, 246, 0.12);
+  border-color: var(--primary);
+  color: var(--primary-hover);
+  box-shadow: 0 0 20px var(--primary-glow);
+}
+
+.btn-brush-teeth-mode.paused .bt-icon {
+  color: var(--primary-hover);
 }
 
 .pulse-ring {

@@ -36,6 +36,9 @@
         <button id="btn-toggle-all-trans" class="btn-icon" title="切換全部翻譯顯示/隱藏 (快捷鍵: T)">
           <span class="icon">👁️</span>
         </button>
+        <button id="btn-stop-all" class="btn-icon" title="暫停/停止所有播放 (快捷鍵: Esc)" style="display: none; background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.3); color: #f87171;">
+          <span class="icon">⏹</span>
+        </button>
         <button id="btn-open-settings" class="btn-icon" title="設定 (快捷鍵: ⚙️)">
           <span class="icon">⚙️</span>
         </button>
@@ -263,11 +266,16 @@
 
     <!-- 7. Fixed Bottom Toolbar (Brush Teeth Mode Control) -->
     <footer class="app-footer">
-      <button id="btn-brush-teeth" class="btn-brush-teeth-mode">
-        <span class="pulse-ring"></span>
-        <span class="bt-icon">🌙</span>
-        <span id="brush-teeth-text" class="bt-text">開啟 刷牙洗臉背景模式</span>
-      </button>
+      <div class="brush-teeth-controls">
+        <button id="btn-brush-teeth" class="btn-brush-teeth-mode">
+          <span class="pulse-ring"></span>
+          <span class="bt-icon">🌙</span>
+          <span id="brush-teeth-text" class="bt-text">開啟 刷牙洗臉背景模式</span>
+        </button>
+        <button id="btn-brush-teeth-stop" class="btn-brush-teeth-stop" title="結束背景模式" style="display: none;">
+          <span class="bt-stop-icon">⏹</span>
+        </button>
+      </div>
     </footer>
 
   </div>

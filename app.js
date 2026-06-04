@@ -38,6 +38,7 @@ let activeRepeatMenuCardId = null; // Custom dropdown trigger
 
 // Brush Teeth Mode (Loop) State
 let isBrushTeethActive = false;
+let isBrushTeethPaused = false;
 let btSentenceIndex = 0;
 let btTimeoutId = null;
 
@@ -230,6 +231,20 @@ function cancelAllSpeech() {
       console.error("停止音訊播放失敗:", e);
     }
   }
+  
+  // 3. 更新全域暫停/停止按鈕顯示狀態
+  updateStopButtonVisibility();
+}
+
+// 根據目前是否有聲音正在播放，動態顯示/隱藏頂部全域暫停/停止按鈕
+function updateStopButtonVisibility() {
+  const btnStop = document.getElementById("btn-stop-all");
+  if (!btnStop) return;
+  if (activePlayingId !== null || isBrushTeethActive) {
+    btnStop.style.display = "inline-flex";
+  } else {
+    btnStop.style.display = "none";
+  }
 }
 
 
@@ -375,6 +390,14 @@ function playCardSentence(cardId, repeatCount) {
     stopBrushTeethMode();
   }
   
+  // If the same card is already playing, clicking the play button again will pause/stop it
+  if (activePlayingId === cardId) {
+    activePlayingId = null;
+    cancelAllSpeech();
+    renderCards();
+    return;
+  }
+  
   const sentence = sentences.find(s => s.id === cardId);
   if (!sentence) return;
   
@@ -427,17 +450,25 @@ function startBrushTeethMode() {
   }
   
   isBrushTeethActive = true;
-  btSentenceIndex = 0;
+  isBrushTeethPaused = false;
   
-  // Visual button updates
-  const btn = document.getElementById("btn-brush-teeth");
-  if (btn) btn.classList.add("active");
+  // 顯示停止按鈕
+  const stopBtn = document.getElementById("btn-brush-teeth-stop");
+  if (stopBtn) stopBtn.style.display = "inline-flex";
   
   playNextBrushTeeth();
 }
 
+function pauseBrushTeethMode() {
+  isBrushTeethPaused = true;
+  if (btTimeoutId) clearTimeout(btTimeoutId);
+  cancelAllSpeech();
+  updateBrushTeethUI();
+  renderCards();
+}
+
 function playNextBrushTeeth() {
-  if (!isBrushTeethActive) return;
+  if (!isBrushTeethActive || isBrushTeethPaused) return;
   
   const filtered = getFilteredSentences();
   if (filtered.length === 0) {
@@ -471,7 +502,7 @@ function playNextBrushTeeth() {
     0,
     // OnComplete
     () => {
-      if (!isBrushTeethActive) return;
+      if (!isBrushTeethActive || isBrushTeethPaused) return;
       
       btSentenceIndex++;
       updateBrushTeethUI(0, repeatCount);
@@ -483,6 +514,7 @@ function playNextBrushTeeth() {
     },
     // OnProgress
     (currentRep, totalRep) => {
+      if (!isBrushTeethActive || isBrushTeethPaused) return;
       updateBrushTeethUI(currentRep, totalRep);
     }
   );
@@ -490,13 +522,21 @@ function playNextBrushTeeth() {
 
 function stopBrushTeethMode() {
   isBrushTeethActive = false;
+  isBrushTeethPaused = false;
+  btSentenceIndex = 0;
   activePlayingId = null;
   
   cancelAllSpeech();
   if (btTimeoutId) clearTimeout(btTimeoutId);
   
   const btn = document.getElementById("btn-brush-teeth");
-  if (btn) btn.classList.remove("active");
+  if (btn) {
+    btn.classList.remove("active");
+    btn.classList.remove("paused");
+  }
+  
+  const stopBtn = document.getElementById("btn-brush-teeth-stop");
+  if (stopBtn) stopBtn.style.display = "none";
   
   updateBrushTeethUI();
   renderCards();
@@ -504,19 +544,34 @@ function stopBrushTeethMode() {
 
 function updateBrushTeethUI(currentRep = 0, totalRep = 0) {
   const textEl = document.getElementById("brush-teeth-text");
-  if (!textEl) return;
+  const btn = document.getElementById("btn-brush-teeth");
+  const stopBtn = document.getElementById("btn-brush-teeth-stop");
+  if (!textEl || !btn) return;
   
   if (isBrushTeethActive) {
     const filtered = getFilteredSentences();
     const currentNum = btSentenceIndex + 1;
     const totalNum = filtered.length;
     
-    if (currentRep > 0) {
-      textEl.textContent = `🌙 運行中：第 ${currentNum}/${totalNum} 句 ｜ 第 ${currentRep}/${totalRep} 遍 (點擊關閉)`;
+    if (stopBtn) stopBtn.style.display = "inline-flex";
+    
+    if (isBrushTeethPaused) {
+      btn.classList.remove("active");
+      btn.classList.add("paused");
+      textEl.textContent = `⏸ 已暫停：第 ${currentNum}/${totalNum} 句 (點擊繼續)`;
     } else {
-      textEl.textContent = `🌙 運行中：第 ${currentNum}/${totalNum} 句 ｜ 準備中... (點擊關閉)`;
+      btn.classList.remove("paused");
+      btn.classList.add("active");
+      if (currentRep > 0) {
+        textEl.textContent = `🌙 運行中：第 ${currentNum}/${totalNum} 句 ｜ 第 ${currentRep}/${totalRep} 遍 (點擊暫停)`;
+      } else {
+        textEl.textContent = `🌙 運行中：第 ${currentNum}/${totalNum} 句 ｜ 準備中... (點擊暫停)`;
+      }
     }
   } else {
+    btn.classList.remove("active");
+    btn.classList.remove("paused");
+    if (stopBtn) stopBtn.style.display = "none";
     textEl.textContent = "開啟 刷牙洗臉背景模式";
   }
 }
@@ -709,9 +764,9 @@ function renderCards() {
         </div>
         
         <div class="play-controls">
-          <!-- Play Trigger -->
+          <!-- Play/Pause Trigger -->
           <div class="btn-control-wrapper">
-            <button class="btn-control btn-play-trigger" data-id="${s.id}" title="播放音檔 (P)">▶</button>
+            <button class="btn-control btn-play-trigger ${isPlaying ? 'playing-active' : ''}" data-id="${s.id}" title="${isPlaying ? '暫停播放 (P)' : '播放音檔 (P)'}">${isPlaying ? '⏸' : '▶'}</button>
           </div>
           
           <!-- Repeat Count Custom Dropdown Trigger -->
@@ -808,6 +863,9 @@ function renderCards() {
     
     grid.appendChild(card);
   });
+  
+  // Update visibility of global stop button in header
+  updateStopButtonVisibility();
 }
 
 function cycleSentenceStatus(id) {
@@ -1162,6 +1220,18 @@ document.addEventListener("DOMContentLoaded", () => {
   const btnCloseSettings = document.getElementById("btn-close-settings");
   const btnSaveSettings = document.getElementById("btn-save-settings");
   
+  const btnStopAll = document.getElementById("btn-stop-all");
+  if (btnStopAll) {
+    btnStopAll.addEventListener("click", () => {
+      if (isBrushTeethActive) {
+        stopBrushTeethMode();
+      }
+      activePlayingId = null;
+      cancelAllSpeech();
+      renderCards();
+    });
+  }
+  
   if (btnSettings && modalSettings) {
     btnSettings.addEventListener("click", () => {
       initSettingsUI();
@@ -1364,14 +1434,28 @@ document.addEventListener("DOMContentLoaded", () => {
   if (btnBrushTeeth) {
     btnBrushTeeth.addEventListener("click", () => {
       if (isBrushTeethActive) {
-        stopBrushTeethMode();
+        if (isBrushTeethPaused) {
+          isBrushTeethPaused = false;
+          updateBrushTeethUI();
+          playNextBrushTeeth();
+        } else {
+          pauseBrushTeethMode();
+        }
       } else {
         startBrushTeethMode();
       }
     });
   }
   
-  // H. Global Keyboard Shortcuts (Space, P, T)
+  const btnBrushTeethStop = document.getElementById("btn-brush-teeth-stop");
+  if (btnBrushTeethStop) {
+    btnBrushTeethStop.addEventListener("click", (e) => {
+      e.stopPropagation();
+      stopBrushTeethMode();
+    });
+  }
+  
+  // H. Global Keyboard Shortcuts (Space, P, T, Escape)
   document.addEventListener("keydown", (e) => {
     // Ignore hotkeys if user is currently typing in an input field or modal
     const activeEl = document.activeElement;
@@ -1380,14 +1464,31 @@ document.addEventListener("DOMContentLoaded", () => {
     
     const key = e.key.toLowerCase();
     
-    // Space key: toggle Brush Teeth Mode
+    // Space key: toggle/pause Brush Teeth Mode
     if (e.key === " " || e.code === "Space") {
       e.preventDefault();
       if (isBrushTeethActive) {
-        stopBrushTeethMode();
+        if (isBrushTeethPaused) {
+          isBrushTeethPaused = false;
+          updateBrushTeethUI();
+          playNextBrushTeeth();
+        } else {
+          pauseBrushTeethMode();
+        }
       } else {
         startBrushTeethMode();
       }
+    }
+    
+    // Escape key: stop all playback immediately
+    else if (e.key === "Escape") {
+      e.preventDefault();
+      if (isBrushTeethActive) {
+        stopBrushTeethMode();
+      }
+      activePlayingId = null;
+      cancelAllSpeech();
+      renderCards();
     }
     
     // P key: Play currently focused card
