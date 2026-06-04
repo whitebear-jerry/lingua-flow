@@ -357,16 +357,22 @@ function speakSingle(text, callback) {
 
 // Handles N-times loops recursively using speechSynthesis events
 function speakRepeat(text, n, count, onComplete, onProgress) {
-  if (count >= n || !activePlayingId || (isBrushTeethActive && isBrushTeethPaused)) {
+  // 只有在正常播放完指定次數時，才呼叫 onComplete 進入下一句
+  if (count >= n) {
     if (onComplete) onComplete();
+    return;
+  }
+  
+  // 若為手動暫停或已無 activePlayingId，直接靜默退出，絕對不觸發下一句的播放
+  if (!activePlayingId || (isBrushTeethActive && isBrushTeethPaused)) {
     return;
   }
   
   if (onProgress) onProgress(count + 1, n);
   
   speakSingle(text, () => {
+    // 在非同步回呼執行時，若已處於暫停或停止狀態，同樣直接靜默退出
     if (!activePlayingId || (isBrushTeethActive && isBrushTeethPaused)) {
-      if (onComplete) onComplete();
       return;
     }
     speakRepeat(text, n, count + 1, onComplete, onProgress);
